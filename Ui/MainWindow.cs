@@ -168,6 +168,7 @@ internal sealed class MainWindow : Window, IDisposable
 
     public override void PreDraw()
     {
+        JournalTheme.Dark = this.recorder.Settings.DarkMode;
         this.PushColor(ImGuiCol.WindowBg, JournalTheme.Cover);
         this.PushColor(ImGuiCol.ChildBg, JournalTheme.Paper);
         this.PushColor(ImGuiCol.TitleBg, JournalTheme.Cover);
@@ -176,14 +177,14 @@ internal sealed class MainWindow : Window, IDisposable
         this.PushColor(ImGuiCol.Button, JournalTheme.Cover);
         this.PushColor(ImGuiCol.ButtonHovered, JournalTheme.CoverHover);
         this.PushColor(ImGuiCol.ButtonActive, JournalTheme.CoverDeep);
-        this.PushColor(ImGuiCol.FrameBg, new Vector4(1f, 0.992f, 0.965f, 1f));
-        this.PushColor(ImGuiCol.FrameBgHovered, new Vector4(1f, 0.976f, 0.94f, 1f));
+        this.PushColor(ImGuiCol.FrameBg, JournalTheme.Frame);
+        this.PushColor(ImGuiCol.FrameBgHovered, JournalTheme.FrameHover);
         this.PushColor(ImGuiCol.FrameBgActive, JournalTheme.PaperInset);
         this.PushColor(ImGuiCol.CheckMark, JournalTheme.Margin);
-        this.PushColor(ImGuiCol.Border, new Vector4(0.141f, 0.118f, 0.094f, 0.28f));
+        this.PushColor(ImGuiCol.Border, JournalTheme.Border);
         this.PushColor(ImGuiCol.Separator, JournalTheme.Rule);
         this.PushColor(ImGuiCol.Header, JournalTheme.CoverSelect);
-        this.PushColor(ImGuiCol.HeaderHovered, new Vector4(0.957f, 0.937f, 0.902f, 0.24f));
+        this.PushColor(ImGuiCol.HeaderHovered, JournalTheme.CoverSelect);
         this.PushColor(ImGuiCol.HeaderActive, JournalTheme.CoverSelect);
         this.PushVar(ImGuiStyleVar.WindowPadding, new Vector2(14, 12));
         this.PushVar(ImGuiStyleVar.FrameRounding, 3f);
@@ -1536,6 +1537,20 @@ internal sealed class MainWindow : Window, IDisposable
         var settings = this.recorder.Settings;
         ImGui.TextUnformatted("Settings");
         ImGui.Spacing();
+        var dark = settings.DarkMode;
+        if (ImGui.Checkbox("Dark mode", ref dark))
+        {
+            settings.DarkMode = dark;
+            settings.Save();
+            JournalTheme.Dark = dark;
+        }
+
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Darkens the page. The navy cover stays.");
+        ImGui.PopStyleColor();
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
         ImGui.TextUnformatted("Record these chats");
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
         ImGui.TextWrapped("Combat, loot, echoes, and other system lines are left out. Random rolls keep a /random, and that box stays off until you turn it on.");
@@ -2438,7 +2453,7 @@ internal sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(1f, 0.992f, 0.965f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, JournalTheme.Frame);
         ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(10, 8));
         ImGui.BeginChild(id, new Vector2(width, height), true);
         ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X);
@@ -2678,9 +2693,9 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.SetNextItemWidth(280);
         ImGui.PushStyleColor(ImGuiCol.PopupBg, JournalTheme.Paper);
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Ink);
-        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.82f, 0.74f, 0.60f, 0.75f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.74f, 0.64f, 0.48f, 0.9f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.66f, 0.55f, 0.40f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.Header, JournalTheme.PopupHeader);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, JournalTheme.PopupHeaderHover);
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, JournalTheme.PopupHeaderActive);
         var open = ImGui.BeginCombo("##scene-storyline", shown);
         if (!open)
         {
@@ -3187,9 +3202,9 @@ internal sealed class MainWindow : Window, IDisposable
     {
         ImGui.PushStyleColor(ImGuiCol.PopupBg, JournalTheme.Paper);
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Ink);
-        ImGui.PushStyleColor(ImGuiCol.Header, new Vector4(0.82f, 0.74f, 0.60f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, new Vector4(0.74f, 0.64f, 0.48f, 1f));
-        ImGui.PushStyleColor(ImGuiCol.HeaderActive, new Vector4(0.66f, 0.55f, 0.40f, 1f));
+        ImGui.PushStyleColor(ImGuiCol.Header, JournalTheme.PopupHeader);
+        ImGui.PushStyleColor(ImGuiCol.HeaderHovered, JournalTheme.PopupHeaderHover);
+        ImGui.PushStyleColor(ImGuiCol.HeaderActive, JournalTheme.PopupHeaderActive);
     }
 
     private static string LineCount(SceneRecord scene) =>

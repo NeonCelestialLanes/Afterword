@@ -44,6 +44,9 @@ internal sealed class RecordingSettings
     /// <summary>Folder for scene logs. Empty means the usual logs folder next to the plugin.</summary>
     public string LogFolder { get; set; } = string.Empty;
 
+    /// <summary>When on, the journal page is dark. The navy cover stays.</summary>
+    public bool DarkMode { get; set; }
+
     [JsonIgnore]
     public string FilePath { get; set; } = string.Empty;
 
