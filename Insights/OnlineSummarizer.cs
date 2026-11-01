@@ -103,18 +103,36 @@ internal static class OnlineSummarizer
         if (string.IsNullOrWhiteSpace(model))
             throw new InvalidOperationException($"Sign in with {service} again so Afterword can choose a model from that plan.");
 
+        var grok = endpoint.Contains("cli-chat-proxy.grok.com", StringComparison.OrdinalIgnoreCase);
         var body = new JObject
         {
             ["model"] = model,
             ["instructions"] = instruction,
-            ["input"] = new JArray
-            {
-                new JObject
+            ["input"] = grok
+                ? new JArray
                 {
-                    ["role"] = "user",
-                    ["content"] = transcript,
+                    new JObject
+                    {
+                        ["type"] = "message",
+                        ["role"] = "user",
+                        ["content"] = new JArray
+                        {
+                            new JObject
+                            {
+                                ["type"] = "input_text",
+                                ["text"] = transcript,
+                            },
+                        },
+                    },
+                }
+                : new JArray
+                {
+                    new JObject
+                    {
+                        ["role"] = "user",
+                        ["content"] = transcript,
+                    },
                 },
-            },
             ["store"] = false,
             ["stream"] = true,
         };
@@ -122,6 +140,8 @@ internal static class OnlineSummarizer
         using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(90) };
         using var request = new HttpRequestMessage(HttpMethod.Post, endpoint);
         request.Headers.Authorization = new AuthenticationHeaderValue("Bearer", accessToken.Trim());
+        if (grok)
+            ApplyGrokClientHeaders(request);
         request.Content = new StringContent(body.ToString(), Encoding.UTF8, "application/json");
 
         HttpResponseMessage response;
@@ -232,9 +252,17 @@ internal static class OnlineSummarizer
             if (root["detail"]?.Type == JTokenType.String)
                 detail = root["detail"]!.ToString();
 
-            var error = root["error"] as JObject ?? root["response"]?["error"] as JObject ?? root;
-            code = error["code"]?.ToString() ?? string.Empty;
-            message = error["message"]?.ToString() ?? string.Empty;
+            if (root["error"]?.Type == JTokenType.String)
+                message = root["error"]!.ToString();
+
+            var error = root["error"] as JObject ?? root["response"]?["error"] as JObject;
+            if (error != null)
+            {
+                code = error["code"]?.ToString() ?? string.Empty;
+                var objectMessage = error["message"]?.ToString() ?? string.Empty;
+                if (objectMessage.Length > 0)
+                    message = objectMessage;
+            }
         }
         catch
         {
@@ -264,6 +292,16 @@ internal static class OnlineSummarizer
         return readable.Length == 0
             ? $"{service} did not send a summary. Try again."
             : readable;
+    }
+
+    internal static void ApplyGrokClientHeaders(HttpRequestMessage request)
+    {
+        const string version = "1.0.46";
+        request.Headers.TryAddWithoutValidation("X-XAI-Token-Auth", "xai-grok-cli");
+        request.Headers.TryAddWithoutValidation("x-grok-client-version", version);
+        request.Headers.TryAddWithoutValidation("x-grok-client-mode", "cli");
+        request.Headers.TryAddWithoutValidation("User-Agent", "xai-grok-workspace/" + version);
+        request.Headers.Accept.Add(new MediaTypeWithQualityHeaderValue("text/event-stream"));
     }
 
     private static bool IsTemporary(string payload)

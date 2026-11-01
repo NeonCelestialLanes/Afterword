@@ -218,6 +218,7 @@ internal sealed class GrokSession
             using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
             using var request = new HttpRequestMessage(HttpMethod.Get, "https://cli-chat-proxy.grok.com/v1/models");
             request.Headers.Authorization = new System.Net.Http.Headers.AuthenticationHeaderValue("Bearer", accessToken);
+            OnlineSummarizer.ApplyGrokClientHeaders(request);
             using var response = await client.SendAsync(request).ConfigureAwait(false);
             var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
             if (!response.IsSuccessStatusCode)
