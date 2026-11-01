@@ -26,6 +26,7 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly GrokSession grok;
     private readonly ISharedImmediateTexture? logo;
     private readonly IFontHandle? pageFont;
+    private readonly IFontHandle? navFont;
     private Page page = Page.NewScene;
     private string titleDraft = string.Empty;
     private string renameDraft = string.Empty;
@@ -135,6 +136,7 @@ internal sealed class MainWindow : Window, IDisposable
         this.grok = grok;
         this.logo = LoadLogo(pluginInterface, textures);
         this.pageFont = CreatePageFont(pluginInterface);
+        this.navFont = CreateNavFont(pluginInterface);
         this.Size = new Vector2(980, 660);
         this.SizeCondition = ImGuiCond.FirstUseEver;
         this.SizeConstraints = new WindowSizeConstraints
@@ -151,11 +153,15 @@ internal sealed class MainWindow : Window, IDisposable
         this.IsOpen = true;
     }
 
-    public void Dispose() => this.pageFont?.Dispose();
+    public void Dispose()
+    {
+        this.pageFont?.Dispose();
+        this.navFont?.Dispose();
+    }
 
     public override void PreDraw()
     {
-        this.PushColor(ImGuiCol.WindowBg, JournalTheme.CoverDeep);
+        this.PushColor(ImGuiCol.WindowBg, JournalTheme.Cover);
         this.PushColor(ImGuiCol.ChildBg, JournalTheme.Paper);
         this.PushColor(ImGuiCol.TitleBg, JournalTheme.Cover);
         this.PushColor(ImGuiCol.TitleBgActive, JournalTheme.Cover);
@@ -215,6 +221,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         this.ApplyPendingSummary();
         var snapshot = this.recorder.Snapshot();
+        DrawCoverWash();
         this.DrawSidebar();
         ImGui.SameLine(0, 12);
 
@@ -277,6 +284,28 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.EndChild();
+    }
+
+    private static void DrawCoverWash()
+    {
+        var draw = ImGui.GetWindowDrawList();
+        var pos = ImGui.GetWindowPos();
+        var size = ImGui.GetWindowSize();
+        var max = pos + size;
+        draw.AddRectFilledMultiColor(
+            pos,
+            new Vector2(max.X, pos.Y + (size.Y * 0.20f)),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.08f)),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.08f)),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0f)),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0f)));
+        draw.AddRectFilledMultiColor(
+            pos,
+            max,
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.07f)),
+            ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.18f)),
+            ImGui.GetColorU32(new Vector4(0f, 0f, 0f, 0.22f)),
+            ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.04f)));
     }
 
     private static void DrawPageDeck(Vector2 origin, Vector2 pageSize)
@@ -342,8 +371,13 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.CoverMuted);
         ImGui.TextUnformatted("a private journal");
         ImGui.PopStyleColor();
-        ImGui.Separator();
-        ImGui.Spacing();
+
+        ImGui.Dummy(new Vector2(0, 6));
+        var draw = ImGui.GetWindowDrawList();
+        var line = ImGui.GetCursorScreenPos();
+        var lineWidth = ImGui.GetContentRegionAvail().X;
+        draw.AddLine(line, line + new Vector2(lineWidth, 0), ImGui.GetColorU32(JournalTheme.CoverLine), 1f);
+        ImGui.Dummy(new Vector2(0, 8));
     }
 
     private static ISharedImmediateTexture? LoadLogo(IDalamudPluginInterface pluginInterface, ITextureProvider textures)
@@ -358,9 +392,10 @@ internal sealed class MainWindow : Window, IDisposable
 
     private void DrawSidebar()
     {
-        ImGui.PushStyleColor(ImGuiCol.ChildBg, JournalTheme.Cover);
-        ImGui.PushStyleColor(ImGuiCol.Separator, JournalTheme.CoverLine);
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0f, 0f, 0f, 0f));
+        ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 2f));
         ImGui.BeginChild("nav", new Vector2(188, 0), false);
+        var navFontOn = this.TryPushNavFont();
         this.DrawLogo();
         this.NavItem("New Scene", Page.NewScene);
         this.NavItem("Import Scene", Page.Import);
@@ -370,8 +405,11 @@ internal sealed class MainWindow : Window, IDisposable
         this.NavItem("Stories", Page.Stories);
         this.NavItem("Scratchpad", Page.Scratchpad);
         this.NavItem("Settings", Page.Settings);
+        if (navFontOn)
+            this.navFont!.Pop();
         ImGui.EndChild();
-        ImGui.PopStyleColor(2);
+        ImGui.PopStyleVar();
+        ImGui.PopStyleColor();
     }
 
     private void NavItem(string label, Page target)
@@ -385,21 +423,34 @@ internal sealed class MainWindow : Window, IDisposable
         var draw = ImGui.GetWindowDrawList();
         if (selected || hovered)
         {
-            draw.AddRectFilled(min, max, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, selected ? 0.14f : 0.07f)), 3f);
+            var barMin = min + new Vector2(1f, 1f);
+            var barMax = max - new Vector2(1f, 1f);
+            var top = selected ? 0.16f : 0.10f;
+            var bottom = selected ? 0.07f : 0.04f;
+            draw.AddRectFilled(barMin, barMax, ImGui.GetColorU32(new Vector4(1f, 1f, 1f, bottom)), 4f);
+            draw.PushClipRect(barMin + new Vector2(3f, 1f), barMax - new Vector2(3f, 1f), true);
+            draw.AddRectFilledMultiColor(
+                barMin,
+                barMax,
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, top)),
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, top)),
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, bottom)),
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, bottom)));
+            draw.PopClipRect();
             draw.AddLine(
-                min + new Vector2(4f, 1f),
-                new Vector2(max.X - 4f, min.Y + 1f),
-                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, selected ? 0.34f : 0.16f)),
+                barMin + new Vector2(4f, 1f),
+                new Vector2(barMax.X - 4f, barMin.Y + 1f),
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, selected ? 0.22f : 0.12f)),
                 1f);
             draw.AddLine(
-                new Vector2(min.X + 4f, max.Y - 1.5f),
-                new Vector2(max.X - 4f, max.Y - 1.5f),
-                ImGui.GetColorU32(new Vector4(0f, 0f, 0f, selected ? 0.35f : 0.16f)),
+                new Vector2(barMin.X + 4f, barMax.Y - 1f),
+                new Vector2(barMax.X - 4f, barMax.Y - 1f),
+                ImGui.GetColorU32(new Vector4(0f, 0f, 0f, selected ? 0.22f : 0.10f)),
                 1f);
         }
 
         var textSize = ImGui.CalcTextSize(label);
-        var textPos = new Vector2(min.X + 10f, min.Y + ((30f - textSize.Y) * 0.5f));
+        var textPos = new Vector2(min.X + 8f, min.Y + ((30f - textSize.Y) * 0.5f));
         draw.AddText(textPos, ImGui.GetColorU32(JournalTheme.CoverInk), label);
 
         if (!pressed)
@@ -1630,6 +1681,15 @@ internal sealed class MainWindow : Window, IDisposable
             1.25f);
     }
 
+    private bool TryPushNavFont()
+    {
+        if (this.navFont is not { Available: true })
+            return false;
+
+        this.navFont.Push();
+        return true;
+    }
+
     private bool TryPushPageFont()
     {
         if (this.pageFont is not { Available: true })
@@ -1652,6 +1712,18 @@ internal sealed class MainWindow : Window, IDisposable
         return pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
             toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 18 });
+        }));
+    }
+
+    private static IFontHandle? CreateNavFont(IDalamudPluginInterface pluginInterface)
+    {
+        var fontPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf");
+        if (!File.Exists(fontPath))
+            return null;
+
+        return pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
+        {
+            toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 16 });
         }));
     }
 
