@@ -11,7 +11,13 @@
     "DalamudApiLevel": 15,
     "Tags": ["roleplay", "notebook"],
     "AcceptsFeedback": false,
+    "IsHide": false,
+    "IsTestingExclusive": false,
     "DownloadCount": 0,
-    "LastUpdate": 1793491200
+    "LastUpdate": "1793571678",
+    "DownloadLinkInstall": "https://raw.githubusercontent.com/NeonCelestialLanes/Afterword/main/plugins/RPChronicles/RPChronicles-0.1.0.0.zip",
+    "DownloadLinkUpdate": "https://raw.githubusercontent.com/NeonCelestialLanes/Afterword/main/plugins/RPChronicles/RPChronicles-0.1.0.0.zip",
+    "DownloadLinkTesting": "https://raw.githubusercontent.com/NeonCelestialLanes/Afterword/main/plugins/RPChronicles/RPChronicles-0.1.0.0.zip",
+    "IconUrl": "https://raw.githubusercontent.com/NeonCelestialLanes/Afterword/main/Assets/afterword-icon.png"
   }
 ]
