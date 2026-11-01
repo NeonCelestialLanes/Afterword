@@ -88,6 +88,7 @@ internal sealed class NotebookStore
             var sameLogin = this.isLoggedIn && this.loggedInId == contentId;
             this.loggedInId = contentId;
             this.isLoggedIn = true;
+            this.MoveHandProfile(contentId, name, world);
 
             if (this.current?.ContentId == contentId)
             {
@@ -158,6 +159,30 @@ internal sealed class NotebookStore
             this.current = this.ReadOrCreate(this.PathFor(contentId), contentId, string.Empty, string.Empty);
             if (this.current.ContentId == this.loggedInId)
                 this.session = null;
+        }
+    }
+
+    public ulong AddProfile(string name, string world)
+    {
+        var cleanName = PlayerNames.Clean(name);
+        var cleanWorld = world.Trim();
+        if (string.IsNullOrWhiteSpace(cleanName) || string.IsNullOrWhiteSpace(cleanWorld))
+            return 0;
+
+        lock (this.gate)
+        {
+            var existing = this.FindProfile(cleanName, cleanWorld);
+            if (existing != 0)
+                return existing;
+
+            var id = HandId(cleanName, cleanWorld);
+            Directory.CreateDirectory(this.directory);
+            var path = this.PathFor(id);
+            if (!File.Exists(path))
+                this.Write(path, CreateFile(id, cleanName, cleanWorld));
+
+            this.log.Information("Added a notebook for {Character}.", cleanName);
+            return id;
         }
     }
 
@@ -348,7 +373,7 @@ internal sealed class NotebookStore
         sceneId = Guid.Empty;
         lock (this.gate)
         {
-            if (this.current == null || !this.isLoggedIn)
+            if (this.current == null || this.current.ContentId == 0)
                 return false;
 
             if (scene.Lines.Count == 0 && string.IsNullOrWhiteSpace(scene.Description))
@@ -1894,6 +1919,122 @@ internal sealed class NotebookStore
         File.WriteAllText(temp, text);
         File.Move(temp, path, overwrite: true);
     }
+
+    private ulong FindProfile(string name, string world)
+    {
+        ulong found = 0;
+        void Consider(NotebookFile? file)
+        {
+            if (found != 0 || file == null || file.ContentId == 0)
+                return;
+
+            if (SameProfile(file.CharacterName, file.World, name, world))
+                found = file.ContentId;
+        }
+
+        Consider(this.current);
+        Consider(this.session);
+        if (!Directory.Exists(this.directory))
+            return found;
+
+        foreach (var path in Directory.GetFiles(this.directory, "*.json"))
+        {
+            if (found != 0)
+                break;
+
+            try
+            {
+                Consider(JsonConvert.DeserializeObject<NotebookFile>(File.ReadAllText(path), JsonSettings));
+            }
+            catch (Exception ex)
+            {
+                this.log.Warning(ex, "Could not read a notebook at {Path}.", path);
+            }
+        }
+
+        return found;
+    }
+
+    private void MoveHandProfile(ulong contentId, string name, string world)
+    {
+        if (contentId == 0 || IsHandId(contentId) || !Directory.Exists(this.directory))
+            return;
+
+        ulong handId = 0;
+        foreach (var path in Directory.GetFiles(this.directory, "*.json"))
+        {
+            try
+            {
+                var file = JsonConvert.DeserializeObject<NotebookFile>(File.ReadAllText(path), JsonSettings);
+                if (file == null || !IsHandId(file.ContentId))
+                    continue;
+
+                if (!SameProfile(file.CharacterName, file.World, name, world))
+                    continue;
+
+                handId = file.ContentId;
+                break;
+            }
+            catch (Exception ex)
+            {
+                this.log.Warning(ex, "Could not read a notebook at {Path}.", path);
+            }
+        }
+
+        if (handId == 0 || File.Exists(this.PathFor(contentId)))
+            return;
+
+        NotebookFile? notebook = null;
+        if (this.current?.ContentId == handId)
+            notebook = this.current;
+        else if (this.session?.ContentId == handId)
+            notebook = this.session;
+        else
+        {
+            try
+            {
+                notebook = JsonConvert.DeserializeObject<NotebookFile>(File.ReadAllText(this.PathFor(handId)), JsonSettings);
+            }
+            catch (Exception ex)
+            {
+                this.log.Warning(ex, "Could not move a notebook onto the logged-in character.");
+                return;
+            }
+        }
+
+        if (notebook == null)
+            return;
+
+        notebook.ContentId = contentId;
+        notebook.CharacterName = name;
+        notebook.World = world;
+        this.Write(this.PathFor(contentId), notebook);
+        var handPath = this.PathFor(handId);
+        if (File.Exists(handPath))
+            File.Delete(handPath);
+    }
+
+    private static bool SameProfile(string leftName, string leftWorld, string rightName, string rightWorld) =>
+        string.Equals(PlayerNames.Clean(leftName), PlayerNames.Clean(rightName), StringComparison.OrdinalIgnoreCase)
+        && string.Equals(leftWorld.Trim(), rightWorld.Trim(), StringComparison.OrdinalIgnoreCase);
+
+    private static ulong HandId(string name, string world)
+    {
+        var text = PlayerNames.Clean(name).ToLowerInvariant() + "\n" + world.Trim().ToLowerInvariant();
+        ulong hash = 14695981039346656037UL;
+        foreach (var ch in text)
+        {
+            hash ^= ch;
+            hash *= 1099511628211UL;
+        }
+
+        if (hash == 0)
+            hash = 1;
+
+        return (hash & 0x3FFF_FFFF_FFFF_FFFFUL) | (1UL << 62);
+    }
+
+    private static bool IsHandId(ulong contentId) => (contentId & (1UL << 62)) != 0;
 
     private static NotebookFile CreateFile(ulong contentId, string name, string world) => new()
     {

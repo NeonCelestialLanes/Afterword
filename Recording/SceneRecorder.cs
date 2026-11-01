@@ -102,6 +102,8 @@ internal sealed class SceneRecorder
         this.marksCleaned = false;
     }
 
+    public ulong AddProfile(string name, string world) => this.store.AddProfile(name, world);
+
     public bool Start(string title, string place, bool everyone, IReadOnlyList<string> cast)
     {
         this.store.ShowLoggedIn();

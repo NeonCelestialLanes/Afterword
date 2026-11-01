@@ -85,6 +85,10 @@ internal sealed class MainWindow : Window, IDisposable
     private string logFolderMessage = string.Empty;
     private string openCharacter = string.Empty;
     private string placeDraft = string.Empty;
+    private bool addingProfile;
+    private string addProfileName = string.Empty;
+    private string addProfileWorld = string.Empty;
+    private string addProfileMessage = string.Empty;
     private string scratchDraft = string.Empty;
     private int scratchChannel = 2;
     private int scratchNext;
@@ -478,9 +482,6 @@ internal sealed class MainWindow : Window, IDisposable
     private void DrawCharacterMenu(NotebookSnapshot snapshot)
     {
         var players = this.recorder.Players();
-        if (players.Count == 0)
-            return;
-
         var shown = string.IsNullOrWhiteSpace(snapshot.CharacterLabel) ? "Choose a character" : snapshot.CharacterLabel;
         ImGui.SetNextItemWidth(280);
         PushPaperPopup();
@@ -491,15 +492,71 @@ internal sealed class MainWindow : Window, IDisposable
                 var chosen = player.ContentId == snapshot.ContentId;
                 if (ImGui.Selectable(player.Label + "##" + player.ContentId, chosen))
                 {
+                    this.addingProfile = false;
                     this.recorder.OpenNotebook(player.ContentId);
                     this.CloseOpenPages();
                 }
             }
 
+            if (players.Count > 0)
+                ImGui.Separator();
+
+            if (ImGui.Selectable("Add a character"))
+                this.addingProfile = true;
+
             ImGui.EndCombo();
         }
 
         ImGui.PopStyleColor(5);
+        ImGui.SameLine();
+        if (CoverButton("Add", new Vector2(72, 30)))
+            this.addingProfile = true;
+
+        if (this.addingProfile)
+        {
+            ImGui.Spacing();
+            ImGui.TextUnformatted("Name");
+            ImGui.SetNextItemWidth(280);
+            ImGui.InputText("##add-profile-name", ref this.addProfileName, 64);
+            ImGui.TextUnformatted("World");
+            ImGui.SetNextItemWidth(280);
+            ImGui.InputText("##add-profile-world", ref this.addProfileWorld, 32);
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped("They show up in this menu. Import a log afterward and it is saved in their notebook.");
+            ImGui.PopStyleColor();
+            if (CoverButton("Add character", new Vector2(150, 30)))
+            {
+                var id = this.recorder.AddProfile(this.addProfileName, this.addProfileWorld);
+                if (id == 0)
+                {
+                    this.addProfileMessage = "Enter a name and a world.";
+                }
+                else
+                {
+                    this.recorder.OpenNotebook(id);
+                    this.CloseOpenPages();
+                    this.addingProfile = false;
+                    this.addProfileName = string.Empty;
+                    this.addProfileWorld = string.Empty;
+                    this.addProfileMessage = string.Empty;
+                }
+            }
+
+            ImGui.SameLine();
+            if (CoverButton("Cancel", new Vector2(100, 30)))
+            {
+                this.addingProfile = false;
+                this.addProfileMessage = string.Empty;
+            }
+
+            if (!string.IsNullOrWhiteSpace(this.addProfileMessage))
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+                ImGui.TextUnformatted(this.addProfileMessage);
+                ImGui.PopStyleColor();
+            }
+        }
+
         ImGui.Dummy(new Vector2(0, 8));
     }
 
@@ -561,21 +618,25 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.TextUnformatted("Import scene");
         ImGui.Spacing();
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextWrapped("Open a text file on this computer. A line can look like [say] Alyra Voss: hello, or [emote] Corvin Hale glances over. You choose who to keep before it is saved.");
+        var destination = string.IsNullOrWhiteSpace(snapshot.CharacterLabel)
+            ? "Choose a character at the top. The log is saved in that notebook."
+            : $"This log is saved in {snapshot.CharacterLabel}'s notebook. Choose someone else at the top to file it there instead.";
+        ImGui.TextWrapped("Open a text file on this computer. A line can look like [say] Alyra Voss: hello, or [emote] Corvin Hale glances over. You choose who to keep before it is saved. " + destination);
         ImGui.PopStyleColor();
         ImGui.Spacing();
 
-        if (!snapshot.IsLoggedIn)
+        var canImport = snapshot.ContentId != 0;
+        if (!canImport)
             ImGui.BeginDisabled();
 
         if (CoverButton("Open a file", new Vector2(160, 32)))
             this.OpenImport(string.Empty);
 
-        if (!snapshot.IsLoggedIn)
+        if (!canImport)
         {
             ImGui.EndDisabled();
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-            ImGui.TextUnformatted("Log into a character first. The imported scene is saved with that character.");
+            ImGui.TextUnformatted("Choose a character at the top first.");
             ImGui.PopStyleColor();
         }
 
@@ -749,7 +810,7 @@ internal sealed class MainWindow : Window, IDisposable
         scene.Summary = string.Empty;
         if (!this.recorder.ImportScene(scene, out var sceneId))
         {
-            this.importMessage = "Log into a character, then try again.";
+            this.importMessage = "Choose a character at the top, then try again.";
             return;
         }
 
@@ -1919,11 +1980,17 @@ internal sealed class MainWindow : Window, IDisposable
         if (CoverButton("New note", new Vector2(140, 30)) && this.recorder.AddStorylineNote(story.Id, out var noteId))
             this.openStorylineNoteId = noteId;
 
+        if (!snapshot.IsLoggedIn)
+            ImGui.EndDisabled();
+
         ImGui.SameLine();
+        if (snapshot.ContentId == 0)
+            ImGui.BeginDisabled();
+
         if (CoverButton("Import a scene", new Vector2(160, 30)))
             this.OpenImport(story.Title);
 
-        if (!snapshot.IsLoggedIn)
+        if (snapshot.ContentId == 0)
             ImGui.EndDisabled();
 
         story.NotePages ??= new List<JournalNote>();
