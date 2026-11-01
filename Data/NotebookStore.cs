@@ -186,6 +186,46 @@ internal sealed class NotebookStore
         }
     }
 
+    public bool RemoveProfile(ulong contentId)
+    {
+        if (contentId == 0)
+            return false;
+
+        lock (this.gate)
+        {
+            if (this.isLoggedIn && this.loggedInId == contentId)
+                return false;
+
+            if (this.current?.ContentId == contentId)
+            {
+                if (this.session != null && this.session.ContentId != contentId)
+                {
+                    this.current = this.session;
+                    this.session = null;
+                }
+                else if (this.isLoggedIn && this.loggedInId != 0 && File.Exists(this.PathFor(this.loggedInId)))
+                {
+                    this.current = this.ReadOrCreate(this.PathFor(this.loggedInId), this.loggedInId, string.Empty, string.Empty);
+                    this.session = null;
+                }
+                else
+                {
+                    this.current = null;
+                }
+            }
+            else if (this.session?.ContentId == contentId)
+            {
+                this.session = null;
+            }
+
+            var path = this.PathFor(contentId);
+            if (File.Exists(path))
+                File.Delete(path);
+            this.log.Information("Deleted a notebook.");
+            return true;
+        }
+    }
+
     public IReadOnlyList<PlayerCharacter> ListPlayers()
     {
         lock (this.gate)

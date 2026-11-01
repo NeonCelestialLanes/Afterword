@@ -86,6 +86,8 @@ internal sealed class MainWindow : Window, IDisposable
     private string openCharacter = string.Empty;
     private string placeDraft = string.Empty;
     private bool addingProfile;
+    private bool profileDeleteArmed;
+    private ulong profileDeleteId;
     private string addProfileName = string.Empty;
     private string addProfileWorld = string.Empty;
     private string addProfileMessage = string.Empty;
@@ -483,6 +485,8 @@ internal sealed class MainWindow : Window, IDisposable
     private void DrawCharacterMenu(NotebookSnapshot snapshot)
     {
         var players = this.recorder.Players();
+        if (this.profileDeleteArmed && this.profileDeleteId != snapshot.ContentId)
+            this.profileDeleteArmed = false;
         var shown = string.IsNullOrWhiteSpace(snapshot.CharacterLabel) ? "Choose a character" : snapshot.CharacterLabel;
         ImGui.SetNextItemWidth(280);
         PushPaperPopup();
@@ -494,6 +498,7 @@ internal sealed class MainWindow : Window, IDisposable
                 if (ImGui.Selectable(player.Label + "##" + player.ContentId, chosen))
                 {
                     this.addingProfile = false;
+                    this.profileDeleteArmed = false;
                     this.recorder.OpenNotebook(player.ContentId);
                     this.CloseOpenPages();
                 }
@@ -511,7 +516,47 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PopStyleColor(5);
         ImGui.SameLine();
         if (CoverButton("Add", new Vector2(72, 30)))
+        {
+            this.profileDeleteArmed = false;
             this.addingProfile = true;
+        }
+
+        var canDelete = snapshot.ContentId != 0 && !snapshot.IsOwnNotebook;
+        if (snapshot.ContentId != 0)
+        {
+            ImGui.SameLine();
+            if (!canDelete)
+                ImGui.BeginDisabled();
+
+            if (CoverButton(this.profileDeleteArmed ? "Delete?" : "Delete", new Vector2(this.profileDeleteArmed ? 96 : 88, 30)) && canDelete)
+            {
+                if (!this.profileDeleteArmed)
+                {
+                    this.profileDeleteArmed = true;
+                    this.profileDeleteId = snapshot.ContentId;
+                    this.addingProfile = false;
+                }
+                else if (this.recorder.RemoveProfile(snapshot.ContentId))
+                {
+                    this.profileDeleteArmed = false;
+                    this.CloseOpenPages();
+                }
+            }
+
+            if (!canDelete)
+            {
+                ImGui.EndDisabled();
+                if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
+                    ImGui.SetTooltip("Log into another character before deleting this notebook.");
+            }
+        }
+
+        if (this.profileDeleteArmed && canDelete)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped($"Delete {snapshot.CharacterLabel}'s notebook from this computer? Scenes, stories, and notes in it are removed. Press Delete? to confirm.");
+            ImGui.PopStyleColor();
+        }
 
         if (this.addingProfile)
         {
