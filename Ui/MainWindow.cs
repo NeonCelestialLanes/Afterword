@@ -151,6 +151,7 @@ internal sealed class MainWindow : Window, IDisposable
             MaximumSize = new Vector2(1680, 1200),
         };
         this.AllowPinning = true;
+        this.AllowBackgroundBlur = false;
     }
 
     internal void OpenSettings()
