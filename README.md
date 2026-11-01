@@ -6,15 +6,13 @@ The journal is named Afterword. The plugin file is `RPChronicles.dll`. Open it w
 
 You need to be logged into a character. Each character has their own notebook.
 
-## Add it in Experimental
+## The link to put in Dalamud
 
-Open **Dalamud Settings**, then the **Experimental** tab. Under **Custom Plugin Repositories**, paste this json link:
+Put this link in **Dalamud Settings**, on the **Experimental** tab, in **Custom Plugin Repositories**:
 
 https://raw.githubusercontent.com/NeonCelestialLanes/Afterword/main/pluginmaster.json
 
-Afterword then shows up in the plugin installer.
-
-The repository is https://github.com/NeonCelestialLanes/Afterword
+That is the link Dalamud reads. Afterword then shows up in the plugin installer.
 
 ## Record a scene
 
