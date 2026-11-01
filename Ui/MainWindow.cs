@@ -242,6 +242,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         if (pageOpen)
         {
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 36f);
             DrawGutter();
             var contentX = 36f;
             var indent = Math.Max(0f, contentX - ImGui.GetCursorPosX());

@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>RPChronicles</AssemblyName>
     <Product>Afterword</Product>
-    <Version>0.1.2.0</Version>
+    <Version>0.1.3.0</Version>
     <Description>Record roleplay scenes from /say and emotes, then reopen them in a private notebook.</Description>
     <Authors>Afterword</Authors>
     <Author>Afterword</Author>
