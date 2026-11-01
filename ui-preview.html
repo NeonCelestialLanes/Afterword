@@ -1,0 +1,600 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <title>Afterword preview</title>
+  <style>
+    .window[data-theme="classic"] {
+      --cover: #1c3147;
+      --cover-ink: #f4efe6;
+      --cover-muted: #b7c3d1;
+      --cover-line: rgba(244, 239, 230, 0.22);
+      --cover-select: rgba(244, 239, 230, 0.16);
+      --paper: #f7f3ea;
+      --ink: #241e18;
+      --muted: #6f6558;
+      --name: #1c3147;
+      --emote: #3f4a3c;
+      --rule: rgba(176, 154, 122, 0.45);
+      --margin: #d4534a;
+      --field-line: rgba(36, 30, 24, 0.28);
+      --button: #1c3147;
+      --button-hover: #274463;
+      --button-ink: #f7f3ea;
+    }
+
+    .window[data-theme="field"] {
+      --cover: #24382e;
+      --cover-ink: #f3f0e6;
+      --cover-muted: #b7c6b8;
+      --cover-line: rgba(243, 240, 230, 0.22);
+      --cover-select: rgba(243, 240, 230, 0.16);
+      --paper: #f4f1e6;
+      --ink: #1e241c;
+      --muted: #5e685c;
+      --name: #24382e;
+      --emote: #3d5344;
+      --rule: rgba(125, 148, 120, 0.4);
+      --margin: #7d9478;
+      --field-line: rgba(30, 36, 28, 0.28);
+      --button: #24382e;
+      --button-hover: #315044;
+      --button-ink: #f4f1e6;
+    }
+
+    .window[data-theme="story"] {
+      --cover: #6e2433;
+      --cover-ink: #fff6ee;
+      --cover-muted: #e4c3c8;
+      --cover-line: rgba(255, 246, 238, 0.24);
+      --cover-select: rgba(255, 246, 238, 0.16);
+      --paper: #fffaf3;
+      --ink: #1c1a19;
+      --muted: #6e6560;
+      --name: #6e2433;
+      --emote: #5c3a42;
+      --rule: rgba(196, 170, 150, 0.35);
+      --margin: #6e2433;
+      --field-line: rgba(28, 26, 25, 0.22);
+      --button: #6e2433;
+      --button-hover: #852d3f;
+      --button-ink: #fffaf3;
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      min-height: 100vh;
+      background: #d9d3cb;
+      color: #2a2622;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 16px;
+      display: flex;
+      flex-direction: column;
+      align-items: center;
+      padding: 28px 16px 40px;
+    }
+
+    .note {
+      width: 980px;
+      max-width: 100%;
+      margin: 0 0 12px;
+      color: #4e4944;
+      font-size: 13px;
+    }
+
+    .states {
+      width: 980px;
+      max-width: 100%;
+      display: flex;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .states button {
+      height: 30px;
+      padding: 0 12px;
+      border: 1px solid #b7b0a6;
+      border-radius: 4px;
+      background: #fff;
+      color: #2a2622;
+      font: inherit;
+      font-size: 13px;
+      cursor: pointer;
+    }
+
+    .states button[aria-pressed="true"] {
+      background: #2a2622;
+      color: #fff;
+    }
+
+    .window {
+      width: 980px;
+      max-width: 100%;
+      height: 660px;
+      background:
+        linear-gradient(180deg, rgba(255, 255, 255, 0.08), transparent 20%),
+        linear-gradient(100deg, rgba(255, 255, 255, 0.07), transparent 46%, rgba(0, 0, 0, 0.22)),
+        var(--cover);
+      border-radius: 8px;
+      overflow: hidden;
+      display: flex;
+      flex-direction: column;
+      box-shadow:
+        0 1px 0 rgba(255, 255, 255, 0.18) inset,
+        0 22px 50px rgba(8, 14, 22, 0.45);
+    }
+
+    .titlebar {
+      height: 30px;
+      background: transparent;
+      display: flex;
+      align-items: center;
+      padding: 0 10px 0 14px;
+      color: var(--cover-ink);
+      font-size: 14px;
+      flex: none;
+      box-shadow: inset 0 -1px 0 rgba(0, 0, 0, 0.28), inset 0 1px 0 rgba(255, 255, 255, 0.12);
+    }
+
+    .titlebar .spacer { flex: 1; }
+
+    .titlebar .chrome {
+      width: 22px;
+      text-align: center;
+      color: var(--cover-muted);
+      font-size: 13px;
+    }
+
+    .pin {
+      width: 11px;
+      height: 11px;
+      border: 1.5px solid var(--cover-muted);
+      border-radius: 50%;
+      margin-right: 6px;
+    }
+
+    .body {
+      flex: 1;
+      display: flex;
+      gap: 0;
+      padding: 12px 18px 16px 10px;
+      min-height: 0;
+    }
+
+    .logo {
+      width: 148px;
+      height: auto;
+      display: block;
+      margin: 2px 0 0;
+    }
+
+    nav {
+      width: 188px;
+      flex: none;
+      background: transparent;
+      padding: 10px 12px 8px 8px;
+      display: flex;
+      flex-direction: column;
+      box-shadow: inset -1px 0 0 rgba(255, 255, 255, 0.1);
+      margin-right: 12px;
+    }
+
+    .tagline {
+      color: var(--cover-muted);
+      font-size: 13px;
+      margin: 2px 2px 8px;
+    }
+
+    nav hr {
+      border: 0;
+      border-top: 1px solid var(--cover-line);
+      margin: 8px 0;
+    }
+
+    .page hr {
+      border: 0;
+      border-top: 1px solid var(--field-line);
+      margin: 8px 0;
+    }
+
+    .nav-item {
+      height: 30px;
+      display: flex;
+      align-items: center;
+      padding: 0 8px;
+      border-radius: 2px;
+      color: var(--cover-ink);
+      cursor: pointer;
+    }
+
+    .nav-item.selected {
+      background: linear-gradient(180deg, rgba(255, 255, 255, 0.16), rgba(255, 255, 255, 0.07));
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.22), inset 0 -1px 0 rgba(0, 0, 0, 0.22);
+      border-radius: 3px;
+    }
+
+    .page {
+      position: relative;
+      flex: 1;
+      margin: 2px 10px 10px 0;
+      background-color: var(--paper);
+      background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.45), transparent 42px);
+      color: var(--ink);
+      min-width: 0;
+      padding: 12px 20px 14px 38px;
+      display: flex;
+      flex-direction: column;
+      min-height: 0;
+      font-family: Georgia, "Palatino Linotype", serif;
+      border-radius: 2px 3px 4px 2px;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.75),
+        inset 16px 0 18px -12px rgba(18, 32, 48, 0.28),
+        1px 1px 0 #efe8d8,
+        2px 2px 0 #e7dcc8,
+        4px 4px 0 #ddd0b8,
+        8px 12px 24px rgba(10, 18, 28, 0.38);
+    }
+
+    .page::before {
+      content: "";
+      position: absolute;
+      left: 22px;
+      top: 0;
+      bottom: 0;
+      width: 1px;
+      background: var(--margin);
+    }
+
+    .banner-name, .meta, .hint, .emote-label, .time {
+      color: var(--muted);
+    }
+
+    .status-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-top: 4px;
+    }
+
+    .dot {
+      width: 10px;
+      height: 10px;
+      border-radius: 50%;
+      background: #d4534a;
+      animation: pulse 1.6s ease-in-out infinite;
+    }
+
+    .dot.paused {
+      background: var(--name);
+      animation: none;
+    }
+
+    @keyframes pulse {
+      0%, 100% { opacity: 0.45; }
+      50% { opacity: 1; }
+    }
+
+    .field-label { margin: 8px 0 6px; }
+
+    input[type="text"] {
+      width: 100%;
+      height: 28px;
+      background: transparent;
+      border: 0;
+      border-bottom: 1px solid var(--field-line);
+      border-radius: 0;
+      color: var(--ink);
+      font-family: Georgia, "Palatino Linotype", serif;
+      font-size: 16px;
+      padding: 0 8px;
+    }
+
+    .actions { display: flex; gap: 8px; margin: 10px 0; }
+
+    button.game {
+      height: 32px;
+      border: 0;
+      border-radius: 3px;
+      background-color: var(--button);
+      background-image: linear-gradient(180deg, rgba(255, 255, 255, 0.18), transparent 46%, rgba(0, 0, 0, 0.22));
+      color: var(--button-ink);
+      font-family: "Segoe UI", sans-serif;
+      font-size: 15px;
+      padding: 0 14px;
+      cursor: pointer;
+      box-shadow:
+        inset 0 1px 0 rgba(255, 255, 255, 0.28),
+        0 1px 1px rgba(8, 16, 28, 0.35);
+    }
+
+    button.game:hover { filter: brightness(1.08); }
+    button.game.wide { min-width: 180px; }
+    button.game.stop { min-width: 140px; }
+    button.game.pause { min-width: 120px; }
+
+    .transcript {
+      overflow: auto;
+      flex: 1;
+      min-height: 0;
+      padding-right: 6px;
+    }
+
+    .line {
+      margin: 0;
+      padding: 8px 0 7px;
+      border-bottom: 1px solid var(--rule);
+    }
+    .line-head { display: flex; gap: 10px; align-items: baseline; }
+    .speaker { color: var(--name); }
+    .body-text { margin-left: 16px; }
+    .body-text.emote { color: var(--emote); }
+
+    .scene-btn {
+      width: 100%;
+      height: 32px;
+      text-align: left;
+      padding: 0 10px;
+    }
+
+    .scene-meta { margin: 4px 0 14px; color: var(--muted); }
+
+    .view { display: none; flex-direction: column; min-height: 0; flex: 1; }
+    .view.active { display: flex; }
+
+    .choice, .checks {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 4px 18px;
+      margin: 2px 0 8px;
+    }
+
+    .choice label, .checks label {
+      display: flex;
+      align-items: center;
+      gap: 6px;
+      font-family: "Segoe UI", sans-serif;
+      font-size: 14px;
+    }
+
+    .add-row {
+      display: flex;
+      gap: 8px;
+      align-items: center;
+      margin: 4px 0 8px;
+    }
+
+    .add-row input { flex: 1; }
+
+    #view-settings { overflow: auto; }
+  </style>
+</head>
+<body>
+  <p class="note">Three notebook directions. The names and lines are sample text. Pick a cover, then use the row under it to check the other screens.</p>
+  <div class="states" id="themes">
+    <button type="button" data-theme="classic" aria-pressed="true">Navy cloth</button>
+    <button type="button" data-theme="field" aria-pressed="false">Field journal</button>
+    <button type="button" data-theme="story" aria-pressed="false">Storybook</button>
+  </div>
+  <div class="states">
+    <button type="button" id="show-new" aria-pressed="false">Before recording</button>
+    <button type="button" id="show-live" aria-pressed="true">While recording</button>
+    <button type="button" id="show-book" aria-pressed="false">My Notebook</button>
+  </div>
+
+  <div class="window" data-theme="classic">
+    <div class="titlebar">
+      <span>Afterword</span>
+      <span class="spacer"></span>
+      <span class="pin"></span>
+      <span class="chrome">x</span>
+    </div>
+    <div class="body">
+      <nav>
+        <img class="logo" src="Assets/afterword-logo.png" alt="Afterword" />
+        <div class="tagline">a private journal</div>
+        <hr />
+        <div class="nav-item selected" data-nav="new">New Scene</div>
+        <div class="nav-item" data-nav="import">Import Scene</div>
+        <div class="nav-item" data-nav="notebook">My Notebook</div>
+        <div class="nav-item" data-nav="characters">Characters</div>
+        <div class="nav-item" data-nav="storylines">Storylines</div>
+        <div class="nav-item" data-nav="settings">Settings</div>
+      </nav>
+      <main class="page">
+        <div class="banner-name">Sample Character · Goblin</div>
+
+        <section class="view" id="view-new">
+          <div class="field-label">New scene</div>
+          <div class="field-label">Title</div>
+          <input type="text" value="The lantern room" readonly />
+          <p class="hint">The Goblet, Ul'dah</p>
+          <p class="hint">Only the chats turned on in Settings are kept, and nothing from before you press Start.</p>
+          <div class="field-label">Who is in this scene</div>
+          <div class="choice">
+            <label><input type="radio" name="new-cast" checked /> Everyone</label>
+            <label><input type="radio" name="new-cast" /> Only these people</label>
+          </div>
+          <div class="checks">
+            <label><input type="checkbox" /> Alyra Voss</label>
+            <label><input type="checkbox" /> Corvin Hale</label>
+          </div>
+          <div class="add-row">
+            <input type="text" placeholder="Add a name" />
+            <button class="game" type="button">Add</button>
+          </div>
+          <div class="actions">
+            <button class="game wide" type="button">Start recording</button>
+          </div>
+        </section>
+
+        <section class="view active" id="view-live">
+          <div class="status-row">
+            <span class="dot"></span>
+            <span>Recording</span>
+            <span class="meta">The lantern room</span>
+          </div>
+          <hr />
+          <input type="text" value="The lantern room" readonly />
+          <p class="meta">Nov 1, 2026 · 3:14 PM  ·  The Goblet, Ul'dah</p>
+          <div class="actions">
+            <button class="game pause" type="button">Pause</button>
+            <button class="game stop" type="button">Stop and save</button>
+          </div>
+          <div class="field-label">Who is in this scene</div>
+          <div class="choice">
+            <label><input type="radio" name="live-cast" /> Everyone</label>
+            <label><input type="radio" name="live-cast" checked /> Only these people</label>
+          </div>
+          <div class="checks">
+            <label><input type="checkbox" checked /> Alyra Voss</label>
+            <label><input type="checkbox" checked /> Corvin Hale</label>
+            <label><input type="checkbox" /> Sample Character</label>
+          </div>
+          <div class="add-row">
+            <input type="text" placeholder="Add a name" />
+            <button class="game" type="button">Add</button>
+          </div>
+          <div class="transcript">
+            <div class="line">
+              <div class="line-head"><span class="time">3:14 PM</span><span class="speaker">Alyra Voss</span></div>
+              <div class="body-text">The lantern is still warm. Someone left it burning.</div>
+            </div>
+            <div class="line">
+              <div class="line-head"><span class="time">3:15 PM</span><span class="speaker">Corvin Hale</span><span class="emote-label">emote</span></div>
+              <div class="body-text emote">glances toward the door, then back at the table.</div>
+            </div>
+            <div class="line">
+              <div class="line-head"><span class="time">3:15 PM</span><span class="speaker">Alyra Voss</span></div>
+              <div class="body-text">Stay a moment. If they return, I want a witness.</div>
+            </div>
+            <div class="line">
+              <div class="line-head"><span class="time">3:16 PM</span><span class="speaker">Corvin Hale</span></div>
+              <div class="body-text">Then we wait. Quietly.</div>
+            </div>
+          </div>
+        </section>
+
+        <section class="view" id="view-notebook">
+          <div class="field-label">My notebook</div>
+          <div class="actions">
+            <button class="game" type="button">New note</button>
+          </div>
+          <div class="field-label">Notes</div>
+          <div class="actions">
+            <button class="game scene-btn" type="button" style="width:auto; flex:1">Things to remember</button>
+            <button class="game" type="button">Delete</button>
+          </div>
+          <div class="scene-meta">Nov 1, 2026 · 3:20 PM   ·   Note</div>
+          <div class="field-label">Scenes</div>
+          <button class="game scene-btn" type="button">The lantern room</button>
+          <div class="scene-meta">Nov 1, 2026 · 3:14 PM   ·   The Goblet, Ul'dah   ·   4 lines   ·   Recording</div>
+          <button class="game scene-btn" type="button">Rain on the balcony</button>
+          <div class="scene-meta">Oct 28, 2026 · 9:02 PM   ·   Empyreum   ·   18 lines   ·   Saved</div>
+          <button class="game scene-btn" type="button">A debt recalled</button>
+          <div class="scene-meta">Oct 19, 2026 · 6:40 PM   ·   The Lavender Beds   ·   11 lines   ·   Saved</div>
+        </section>
+
+        <section class="view" id="view-import">
+          <div class="field-label">Import scene</div>
+          <p class="hint">Open a text file on this computer. A line like Alyra: The lantern is still warm becomes dialogue. The scene is saved in My Notebook.</p>
+          <div class="actions">
+            <button class="game" type="button">Open a file</button>
+          </div>
+        </section>
+        <section class="view" id="view-characters">
+          <div class="field-label">Characters</div>
+          <p class="hint">Add someone who is not on screen, such as an NPC. People who speak in a scene are listed here too.</p>
+          <div class="add-row">
+            <input type="text" placeholder="Name" value="The night clerk" />
+            <button class="game" type="button">Add</button>
+          </div>
+          <button class="game scene-btn" type="button">Alyra Voss</button>
+          <button class="game scene-btn" type="button">Corvin Hale</button>
+          <button class="game scene-btn" type="button">The night clerk</button>
+        </section>
+        <section class="view" id="view-storylines">
+          <div class="field-label">Storylines</div>
+          <p class="hint">Name a story before anyone has spoken. You can attach a scene to it later.</p>
+          <div class="add-row">
+            <input type="text" placeholder="Storyline name" value="The lantern debt" />
+            <button class="game" type="button">Add</button>
+          </div>
+          <button class="game scene-btn" type="button">The lantern debt</button>
+          <div class="scene-meta">Nov 1, 2026   ·   1 scene</div>
+        </section>
+        <section class="view" id="view-settings">
+          <div class="field-label">Settings</div>
+          <div class="field-label">Record these chats</div>
+          <p class="hint">Combat, loot, echoes, and other system lines are never recorded. Say and emotes start on. The rest stay off until you check them.</p>
+          <div class="checks">
+            <label><input type="checkbox" checked /> Say</label>
+            <label><input type="checkbox" checked /> Emote</label>
+            <label><input type="checkbox" /> Shout</label>
+            <label><input type="checkbox" /> Yell</label>
+            <label><input type="checkbox" /> Tell</label>
+            <label><input type="checkbox" /> Party</label>
+            <label><input type="checkbox" /> Alliance</label>
+            <label><input type="checkbox" /> Free Company</label>
+            <label><input type="checkbox" /> Linkshell</label>
+            <label><input type="checkbox" /> Cross-world linkshell</label>
+            <label><input type="checkbox" /> Novice Network</label>
+          </div>
+          <label class="checks"><input type="checkbox" checked /> Skip out-of-character text</label>
+          <p class="hint">Leaves out text wrapped in [ ], ( ), or (( )). A line that only starts or ends with one of those is left out too. “Hello (brb)” keeps “Hello”.</p>
+        </section>
+      </main>
+    </div>
+  </div>
+
+  <script>
+    const views = {
+      new: "view-new",
+      live: "view-live",
+      notebook: "view-notebook",
+      import: "view-import",
+      characters: "view-characters",
+      storylines: "view-storylines",
+      settings: "view-settings",
+    };
+
+    const stateButtons = {
+      new: document.getElementById("show-new"),
+      live: document.getElementById("show-live"),
+      notebook: document.getElementById("show-book"),
+    };
+
+    function show(name) {
+      document.querySelectorAll(".view").forEach((view) => view.classList.remove("active"));
+      document.getElementById(views[name]).classList.add("active");
+
+      const navName = name === "live" ? "new" : name;
+      document.querySelectorAll(".nav-item").forEach((item) => {
+        item.classList.toggle("selected", item.dataset.nav === navName);
+      });
+
+      Object.entries(stateButtons).forEach(([key, button]) => {
+        button.setAttribute("aria-pressed", key === name ? "true" : "false");
+      });
+    }
+
+    document.querySelectorAll("#themes button").forEach((button) => {
+      button.addEventListener("click", () => {
+        document.querySelector(".window").dataset.theme = button.dataset.theme;
+        document.querySelectorAll("#themes button").forEach((item) => {
+          item.setAttribute("aria-pressed", item === button ? "true" : "false");
+        });
+      });
+    });
+
+    stateButtons.new.addEventListener("click", () => show("new"));
+    stateButtons.live.addEventListener("click", () => show("live"));
+    stateButtons.notebook.addEventListener("click", () => show("notebook"));
+    document.querySelectorAll(".nav-item").forEach((item) => {
+      item.addEventListener("click", () => show(item.dataset.nav));
+    });
+  </script>
+</body>
+</html>
