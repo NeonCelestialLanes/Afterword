@@ -93,8 +93,17 @@ internal sealed class SceneRecorder
             this.chat.Print("Afterword paused. Log back in and press Resume to continue the scene.");
     }
 
+    public IReadOnlyList<PlayerCharacter> Players() => this.store.ListPlayers();
+
+    public void OpenNotebook(ulong contentId)
+    {
+        this.store.OpenNotebook(contentId);
+        this.marksCleaned = false;
+    }
+
     public bool Start(string title, string place, bool everyone, IReadOnlyList<string> cast)
     {
+        this.store.ShowLoggedIn();
         var where = string.IsNullOrWhiteSpace(place) ? this.CurrentPlace : place.Trim();
         var started = this.store.TryStart(title, where, everyone, cast, out _);
         if (!started)

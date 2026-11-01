@@ -28,6 +28,8 @@ internal sealed class NotebookStore
     private readonly IPluginLog log;
     private readonly object gate = new();
     private NotebookFile? current;
+    private NotebookFile? session;
+    private ulong loggedInId;
     private bool isLoggedIn;
 
     public NotebookStore(string configDirectory, IPluginLog log)
@@ -83,21 +85,108 @@ internal sealed class NotebookStore
 
         lock (this.gate)
         {
+            var sameLogin = this.isLoggedIn && this.loggedInId == contentId;
+            this.loggedInId = contentId;
+            this.isLoggedIn = true;
+
             if (this.current?.ContentId == contentId)
             {
-                if (!string.IsNullOrWhiteSpace(name))
-                    this.current.CharacterName = name;
-                if (!string.IsNullOrWhiteSpace(world))
-                    this.current.World = world;
-                this.isLoggedIn = true;
+                ApplyIdentity(this.current, name, world);
+                this.session = null;
+                return;
+            }
+
+            if (sameLogin && this.current != null)
+            {
+                if (this.session?.ContentId == contentId)
+                {
+                    ApplyIdentity(this.session, name, world);
+                    return;
+                }
+
+                this.SaveSession();
+                this.session = this.ReadOrCreate(this.PathFor(contentId), contentId, name, world);
                 return;
             }
 
             this.SaveUnlocked();
+            this.SaveSession();
+            this.session = null;
             this.current = this.ReadOrCreate(this.PathFor(contentId), contentId, name, world);
-            this.isLoggedIn = true;
             this.SaveUnlocked();
             this.log.Information("Opened the notebook for {Character}.", this.current.CharacterName);
+        }
+    }
+
+    public void ShowLoggedIn()
+    {
+        if (this.loggedInId == 0)
+            return;
+
+        this.OpenNotebook(this.loggedInId);
+    }
+
+    public void OpenNotebook(ulong contentId)
+    {
+        if (contentId == 0)
+            return;
+
+        lock (this.gate)
+        {
+            if (this.current?.ContentId == contentId)
+                return;
+
+            this.SaveUnlocked();
+            this.SaveSession();
+
+            if (this.session?.ContentId == contentId)
+            {
+                var leaving = this.current;
+                this.current = this.session;
+                this.session = leaving != null && this.isLoggedIn && leaving.ContentId == this.loggedInId
+                    ? leaving
+                    : null;
+                return;
+            }
+
+            if (this.isLoggedIn && this.current?.ContentId == this.loggedInId)
+                this.session = this.current;
+
+            if (!File.Exists(this.PathFor(contentId)))
+                return;
+
+            this.current = this.ReadOrCreate(this.PathFor(contentId), contentId, string.Empty, string.Empty);
+            if (this.current.ContentId == this.loggedInId)
+                this.session = null;
+        }
+    }
+
+    public IReadOnlyList<PlayerCharacter> ListPlayers()
+    {
+        lock (this.gate)
+        {
+            var found = new List<PlayerCharacter>();
+            var seen = new HashSet<ulong>();
+            if (Directory.Exists(this.directory))
+            {
+                foreach (var path in Directory.GetFiles(this.directory, "*.json"))
+                {
+                    try
+                    {
+                        var file = JsonConvert.DeserializeObject<NotebookFile>(File.ReadAllText(path), JsonSettings);
+                        AddPlayer(found, seen, file);
+                    }
+                    catch (Exception ex)
+                    {
+                        this.log.Warning(ex, "Could not read a notebook at {Path}.", path);
+                    }
+                }
+            }
+
+            AddPlayer(found, seen, this.current);
+            AddPlayer(found, seen, this.session);
+            found.Sort((a, b) => string.Compare(a.Name, b.Name, StringComparison.OrdinalIgnoreCase));
+            return found;
         }
     }
 
@@ -105,13 +194,17 @@ internal sealed class NotebookStore
     {
         lock (this.gate)
         {
+            var recording = this.RecordingFile();
             this.isLoggedIn = false;
-            var active = this.ActiveUnlocked();
+            var active = ActiveOn(recording);
             var wasRecording = active?.Status == SceneStatus.Recording;
             if (wasRecording && active != null)
                 active.Status = SceneStatus.Paused;
 
-            this.SaveUnlocked();
+            if (recording != null)
+                this.SaveFile(recording);
+            else
+                this.SaveUnlocked();
             return wasRecording;
         }
     }
@@ -121,7 +214,7 @@ internal sealed class NotebookStore
         sceneId = Guid.Empty;
         lock (this.gate)
         {
-            if (this.current == null || !this.isLoggedIn)
+            if (this.current == null || !this.isLoggedIn || this.current.ContentId != this.loggedInId)
                 return false;
 
             if (this.ActiveUnlocked() != null)
@@ -164,7 +257,7 @@ internal sealed class NotebookStore
     {
         lock (this.gate)
         {
-            if (!this.isLoggedIn)
+            if (!this.isLoggedIn || this.current?.ContentId != this.loggedInId)
                 return false;
 
             var active = this.ActiveUnlocked();
@@ -1098,7 +1191,8 @@ internal sealed class NotebookStore
     {
         lock (this.gate)
         {
-            var active = this.ActiveUnlocked();
+            var recording = this.RecordingFile();
+            var active = ActiveOn(recording);
             if (active?.Status != SceneStatus.Recording)
                 return;
 
@@ -1106,7 +1200,7 @@ internal sealed class NotebookStore
                 return;
 
             active.Lines.Add(line);
-            this.SaveUnlocked();
+            this.SaveFile(recording!);
         }
     }
 
@@ -1245,9 +1339,14 @@ internal sealed class NotebookStore
             this.current.Characters ??= new List<CharacterProfile>();
             this.current.Storylines ??= new List<StorylineRecord>();
 
+            this.LoginIdentity(out var loggedInName, out var loggedInWorld);
             return new NotebookSnapshot
             {
                 IsLoggedIn = this.isLoggedIn,
+                ContentId = this.current.ContentId,
+                LoggedInId = this.loggedInId,
+                LoggedInName = loggedInName,
+                LoggedInWorld = loggedInWorld,
                 CharacterName = this.current.CharacterName,
                 World = this.current.World,
                 Scenes = scenes,
@@ -1303,18 +1402,92 @@ internal sealed class NotebookStore
         return clean;
     }
 
-    private SceneRecord? ActiveUnlocked()
+    private SceneRecord? ActiveUnlocked() => ActiveOn(this.current);
+
+    private NotebookFile? RecordingFile()
     {
-        if (this.current == null)
+        if (!this.isLoggedIn || this.loggedInId == 0)
             return null;
 
-        foreach (var scene in this.current.Scenes)
+        if (this.current?.ContentId == this.loggedInId)
+            return this.current;
+
+        if (this.session?.ContentId == this.loggedInId)
+            return this.session;
+
+        return null;
+    }
+
+    private void LoginIdentity(out string name, out string world)
+    {
+        var file = this.session?.ContentId == this.loggedInId
+            ? this.session
+            : this.current?.ContentId == this.loggedInId ? this.current : null;
+        name = file?.CharacterName ?? string.Empty;
+        world = file?.World ?? string.Empty;
+    }
+
+    private static void ApplyIdentity(NotebookFile file, string name, string world)
+    {
+        if (!string.IsNullOrWhiteSpace(name))
+            file.CharacterName = name;
+        if (!string.IsNullOrWhiteSpace(world))
+            file.World = world;
+    }
+
+    private static void AddPlayer(List<PlayerCharacter> found, HashSet<ulong> seen, NotebookFile? file)
+    {
+        if (file == null || file.ContentId == 0 || string.IsNullOrWhiteSpace(file.CharacterName) || !seen.Add(file.ContentId))
+            return;
+
+        found.Add(new PlayerCharacter
+        {
+            ContentId = file.ContentId,
+            Name = file.CharacterName,
+            World = file.World ?? string.Empty,
+        });
+    }
+
+    private static SceneRecord? ActiveOn(NotebookFile? file)
+    {
+        if (file?.Scenes == null)
+            return null;
+
+        foreach (var scene in file.Scenes)
         {
             if (scene.Status is SceneStatus.Recording or SceneStatus.Paused)
                 return scene;
         }
 
         return null;
+    }
+
+    private void SaveSession()
+    {
+        if (this.session == null || this.session.ContentId == 0)
+            return;
+
+        this.SaveFile(this.session);
+    }
+
+    private void SaveFile(NotebookFile file)
+    {
+        if (ReferenceEquals(file, this.current))
+        {
+            this.SaveUnlocked();
+            return;
+        }
+
+        var viewed = this.current;
+        this.current = file;
+        try
+        {
+            this.SaveUnlocked();
+        }
+        finally
+        {
+            this.current = viewed;
+        }
     }
 
     private SceneRecord? FindUnlocked(Guid sceneId)

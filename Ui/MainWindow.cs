@@ -473,8 +473,49 @@ internal sealed class MainWindow : Window, IDisposable
             this.openCharacter = string.Empty;
     }
 
+    private void DrawCharacterMenu(NotebookSnapshot snapshot)
+    {
+        var players = this.recorder.Players();
+        if (players.Count == 0)
+            return;
+
+        var shown = string.IsNullOrWhiteSpace(snapshot.CharacterLabel) ? "Choose a character" : snapshot.CharacterLabel;
+        ImGui.SetNextItemWidth(280);
+        PushPaperPopup();
+        if (ImGui.BeginCombo("##your-character", shown))
+        {
+            foreach (var player in players)
+            {
+                var chosen = player.ContentId == snapshot.ContentId;
+                if (ImGui.Selectable(player.Label + "##" + player.ContentId, chosen))
+                {
+                    this.recorder.OpenNotebook(player.ContentId);
+                    this.CloseOpenPages();
+                }
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.PopStyleColor(5);
+        ImGui.Spacing();
+    }
+
+    private void CloseOpenPages()
+    {
+        this.openSceneId = null;
+        this.openNoteId = null;
+        this.openStorylineId = null;
+        this.openStorylineNoteId = null;
+        this.openWrittenStoryId = null;
+        this.openCharacter = string.Empty;
+        this.writtenDeleteArmed = false;
+        this.characterDeleteArmed = false;
+    }
+
     private void DrawBanner(NotebookSnapshot snapshot)
     {
+        this.DrawCharacterMenu(snapshot);
         if (!snapshot.IsLoggedIn)
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
@@ -484,10 +525,10 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.PopStyleColor();
             ImGui.Separator();
         }
-        else if (!string.IsNullOrWhiteSpace(snapshot.CharacterLabel))
+        else if (!snapshot.IsOwnNotebook && !string.IsNullOrWhiteSpace(snapshot.LoggedInLabel))
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-            ImGui.TextUnformatted(snapshot.CharacterLabel);
+            ImGui.TextWrapped($"Logged in as {snapshot.LoggedInLabel}. You can read and edit this notebook. A new scene is recorded on {snapshot.LoggedInName}.");
             ImGui.PopStyleColor();
         }
 
@@ -753,7 +794,7 @@ internal sealed class MainWindow : Window, IDisposable
         var active = snapshot.ActiveScene;
         if (active != null)
         {
-            this.DrawActiveScene(active, snapshot.IsLoggedIn);
+            this.DrawActiveScene(active, snapshot.IsLoggedIn && snapshot.IsOwnNotebook);
             return;
         }
 
@@ -775,7 +816,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         this.DrawCast(live: false, scene: null);
 
-        var canStart = snapshot.IsLoggedIn;
+        var canStart = snapshot.IsLoggedIn && snapshot.IsOwnNotebook;
         if (!canStart)
             ImGui.BeginDisabled();
 
@@ -794,7 +835,9 @@ internal sealed class MainWindow : Window, IDisposable
         {
             ImGui.EndDisabled();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip("Log into a character first.");
+                ImGui.SetTooltip(snapshot.IsLoggedIn
+                    ? $"Log into {snapshot.CharacterName} to record a new scene."
+                    : "Log into a character first.");
         }
     }
 
@@ -903,7 +946,7 @@ internal sealed class MainWindow : Window, IDisposable
                 ImGui.Spacing();
                 if (selected.Status is SceneStatus.Recording or SceneStatus.Paused)
                 {
-                    this.DrawActiveScene(selected, snapshot.IsLoggedIn);
+                    this.DrawActiveScene(selected, snapshot.IsLoggedIn && snapshot.IsOwnNotebook);
                     return;
                 }
 

@@ -205,13 +205,42 @@ internal sealed class WrittenStory
 
     public DateTimeOffset WrittenAt { get; set; }
 }
+internal sealed class PlayerCharacter
+{
+    public ulong ContentId { get; init; }
+
+    public string Name { get; init; } = string.Empty;
+
+    public string World { get; init; } = string.Empty;
+
+    public string Label =>
+        string.IsNullOrWhiteSpace(this.World) ? this.Name : $"{this.Name} · {this.World}";
+}
+
 internal sealed class NotebookSnapshot
 {
     public bool IsLoggedIn { get; init; }
 
+    public ulong ContentId { get; init; }
+
+    public ulong LoggedInId { get; init; }
+
+    public string LoggedInName { get; init; } = string.Empty;
+
+    public string LoggedInWorld { get; init; } = string.Empty;
+
     public string CharacterName { get; init; } = string.Empty;
 
     public string World { get; init; } = string.Empty;
+
+    public bool IsOwnNotebook => this.LoggedInId != 0 && this.ContentId == this.LoggedInId;
+
+    public string LoggedInLabel =>
+        string.IsNullOrWhiteSpace(this.LoggedInName)
+            ? string.Empty
+            : string.IsNullOrWhiteSpace(this.LoggedInWorld)
+                ? this.LoggedInName
+                : $"{this.LoggedInName} · {this.LoggedInWorld}";
 
     public IReadOnlyList<SceneRecord> Scenes { get; init; } = Array.Empty<SceneRecord>();
 
