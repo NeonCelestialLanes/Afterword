@@ -1,0 +1,17 @@
+[
+  {
+    "Author": "Afterword",
+    "Name": "Afterword",
+    "Punchline": "A private notebook for roleplay scenes.",
+    "Description": "Record roleplay scenes from /say and emotes, then reopen them in a private notebook. Logs stay on this computer.",
+    "InternalName": "RPChronicles",
+    "AssemblyVersion": "0.1.0.0",
+    "RepoUrl": "https://github.com/NeonCelestialLanes/Afterword",
+    "ApplicableVersion": "any",
+    "DalamudApiLevel": 15,
+    "Tags": ["roleplay", "notebook"],
+    "AcceptsFeedback": false,
+    "DownloadCount": 0,
+    "LastUpdate": 1793491200
+  }
+]
