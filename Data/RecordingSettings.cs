@@ -32,11 +32,17 @@ internal sealed class RecordingSettings
 
     public bool NoviceNetwork { get; set; }
 
+    /// <summary>When on, a /random is kept. Loot rolls stay out. Off until the player turns it on.</summary>
+    public bool Random { get; set; }
+
     /// <summary>
     /// When on, text wrapped in [], (), or (()) is left out, and a line that
     /// starts or ends with those marks is left out too.
     /// </summary>
     public bool SkipOutOfCharacter { get; set; } = true;
+
+    /// <summary>Folder for scene logs. Empty means the usual logs folder next to the plugin.</summary>
+    public string LogFolder { get; set; } = string.Empty;
 
     [JsonIgnore]
     public string FilePath { get; set; } = string.Empty;
@@ -54,6 +60,7 @@ internal sealed class RecordingSettings
         ChatChannel.Linkshell => this.Linkshell,
         ChatChannel.CrossWorldLinkshell => this.CrossWorldLinkshell,
         ChatChannel.NoviceNetwork => this.NoviceNetwork,
+        ChatChannel.Random => this.Random,
         _ => false,
     };
 
@@ -72,6 +79,7 @@ internal sealed class RecordingSettings
             case ChatChannel.Linkshell: this.Linkshell = enabled; break;
             case ChatChannel.CrossWorldLinkshell: this.CrossWorldLinkshell = enabled; break;
             case ChatChannel.NoviceNetwork: this.NoviceNetwork = enabled; break;
+            case ChatChannel.Random: this.Random = enabled; break;
         }
 
         this.Save();
@@ -127,4 +135,5 @@ internal enum ChatChannel
     Linkshell,
     CrossWorldLinkshell,
     NoviceNetwork,
+    Random,
 }

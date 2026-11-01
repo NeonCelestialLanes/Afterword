@@ -1,6 +1,7 @@
 using System;
 using System.Collections.Generic;
 using System.IO;
+using System.Text;
 using Dalamud.Plugin.Services;
 using Newtonsoft.Json;
 using Newtonsoft.Json.Converters;
@@ -22,6 +23,8 @@ internal sealed class NotebookStore
     };
 
     private readonly string directory;
+    private readonly string defaultLogDirectory;
+    private string logDirectory;
     private readonly IPluginLog log;
     private readonly object gate = new();
     private NotebookFile? current;
@@ -30,8 +33,47 @@ internal sealed class NotebookStore
     public NotebookStore(string configDirectory, IPluginLog log)
     {
         this.directory = Path.Combine(configDirectory, "notebooks");
+        this.defaultLogDirectory = Path.Combine(configDirectory, "logs");
+        this.logDirectory = this.defaultLogDirectory;
         Directory.CreateDirectory(this.directory);
+        Directory.CreateDirectory(this.logDirectory);
         this.log = log;
+    }
+
+    public string LogFolder => this.logDirectory;
+
+    public string UsualLogFolder => this.defaultLogDirectory;
+
+    public bool IsUsualLogFolder =>
+        string.Equals(Path.GetFullPath(this.logDirectory), Path.GetFullPath(this.defaultLogDirectory), StringComparison.OrdinalIgnoreCase);
+
+    public string UseLogFolder(string? folder, out bool changed)
+    {
+        lock (this.gate)
+        {
+            changed = false;
+            string next;
+            try
+            {
+                next = string.IsNullOrWhiteSpace(folder)
+                    ? this.defaultLogDirectory
+                    : Path.GetFullPath(folder.Trim());
+                Directory.CreateDirectory(next);
+            }
+            catch (Exception ex)
+            {
+                this.log.Error(ex, "Could not open the log folder.");
+                return "That folder could not be opened. Logs stay in the usual place.";
+            }
+
+            if (string.Equals(Path.GetFullPath(this.logDirectory), next, StringComparison.OrdinalIgnoreCase))
+                return "Logs are already saved there.";
+
+            this.logDirectory = next;
+            changed = true;
+            this.SaveUnlocked();
+            return "New logs are saved in that folder. A titled scene uses the date and its title. A scene without a title uses the date and time.";
+        }
     }
 
     public void LoadCharacter(ulong contentId, string name, string world)
@@ -54,6 +96,7 @@ internal sealed class NotebookStore
             this.SaveUnlocked();
             this.current = this.ReadOrCreate(this.PathFor(contentId), contentId, name, world);
             this.isLoggedIn = true;
+            this.SaveUnlocked();
             this.log.Information("Opened the notebook for {Character}.", this.current.CharacterName);
         }
     }
@@ -238,7 +281,10 @@ internal sealed class NotebookStore
             if (scene == null || this.current == null)
                 return false;
 
+            var logFile = scene.LogFile;
+            scene.LogFile = string.Empty;
             this.current.Scenes.Remove(scene);
+            this.DeleteLog(logFile);
             this.SaveUnlocked();
             return true;
         }
@@ -452,6 +498,13 @@ internal sealed class NotebookStore
                     scene.Storyline = trimmed;
             }
 
+            this.current.Stories ??= new List<WrittenStory>();
+            foreach (var written in this.current.Stories)
+            {
+                if (string.Equals(written.Storyline, previous, StringComparison.OrdinalIgnoreCase))
+                    written.Storyline = trimmed;
+            }
+
             this.SaveUnlocked();
         }
     }
@@ -487,6 +540,107 @@ internal sealed class NotebookStore
                     scene.Storyline = string.Empty;
             }
 
+            this.current.Stories ??= new List<WrittenStory>();
+            foreach (var written in this.current.Stories)
+            {
+                if (string.Equals(written.Storyline, story.Title, StringComparison.OrdinalIgnoreCase))
+                    written.Storyline = string.Empty;
+            }
+
+            this.SaveUnlocked();
+        }
+    }
+
+    public bool AddWrittenStory(out Guid id)
+    {
+        id = Guid.Empty;
+        lock (this.gate)
+        {
+            if (this.current == null || !this.isLoggedIn)
+                return false;
+
+            this.current.Stories ??= new List<WrittenStory>();
+            var story = new WrittenStory
+            {
+                Id = Guid.NewGuid(),
+                WrittenAt = DateTimeOffset.Now,
+            };
+            this.current.Stories.Add(story);
+            id = story.Id;
+            this.SaveUnlocked();
+            return true;
+        }
+    }
+
+    public void SetWrittenStoryTitle(Guid id, string title)
+    {
+        lock (this.gate)
+        {
+            var story = this.FindWrittenStory(id);
+            if (story == null)
+                return;
+
+            var trimmed = title.Trim();
+            if (trimmed.Length == 0 || trimmed == story.Title)
+                return;
+
+            story.Title = trimmed;
+            this.SaveUnlocked();
+        }
+    }
+
+    public void SetWrittenStoryBody(Guid id, string body)
+    {
+        lock (this.gate)
+        {
+            var story = this.FindWrittenStory(id);
+            if (story == null || story.Body == body)
+                return;
+
+            story.Body = body;
+            this.SaveUnlocked();
+        }
+    }
+
+    public void SetWrittenStoryStoryline(Guid id, string title)
+    {
+        lock (this.gate)
+        {
+            var story = this.FindWrittenStory(id);
+            if (story == null)
+                return;
+
+            var trimmed = title.Trim();
+            if (string.Equals(story.Storyline, trimmed, StringComparison.Ordinal))
+                return;
+
+            story.Storyline = trimmed;
+            this.SaveUnlocked();
+        }
+    }
+
+    public void SetWrittenStoryLore(Guid id, bool affectsLore)
+    {
+        lock (this.gate)
+        {
+            var story = this.FindWrittenStory(id);
+            if (story == null || story.AffectsLore == affectsLore)
+                return;
+
+            story.AffectsLore = affectsLore;
+            this.SaveUnlocked();
+        }
+    }
+
+    public void RemoveWrittenStory(Guid id)
+    {
+        lock (this.gate)
+        {
+            var story = this.FindWrittenStory(id);
+            if (story == null || this.current?.Stories == null)
+                return;
+
+            this.current.Stories.Remove(story);
             this.SaveUnlocked();
         }
     }
@@ -1099,6 +1253,7 @@ internal sealed class NotebookStore
                 Scenes = scenes,
                 Characters = new List<CharacterProfile>(this.current.Characters),
                 Storylines = new List<StorylineRecord>(this.current.Storylines),
+                Stories = new List<WrittenStory>(this.current.Stories ?? new List<WrittenStory>()),
                 Notes = new List<JournalNote>(this.current.Notes ?? new List<JournalNote>()),
             };
         }
@@ -1249,6 +1404,20 @@ internal sealed class NotebookStore
         return profile;
     }
 
+    private WrittenStory? FindWrittenStory(Guid id)
+    {
+        if (this.current?.Stories == null)
+            return null;
+
+        foreach (var story in this.current.Stories)
+        {
+            if (story.Id == id)
+                return story;
+        }
+
+        return null;
+    }
+
     private StorylineRecord? FindStoryline(Guid id)
     {
         if (this.current?.Storylines == null)
@@ -1320,7 +1489,14 @@ internal sealed class NotebookStore
             file.Scenes ??= new List<SceneRecord>();
             file.Characters ??= new List<CharacterProfile>();
             file.Storylines ??= new List<StorylineRecord>();
+            file.Stories ??= new List<WrittenStory>();
             file.Notes ??= new List<JournalNote>();
+            foreach (var written in file.Stories)
+            {
+                written.Title ??= "New story";
+                written.Body ??= string.Empty;
+                written.Storyline ??= string.Empty;
+            }
             foreach (var story in file.Storylines)
             {
                 story.NotePages ??= new List<JournalNote>();
@@ -1379,6 +1555,7 @@ internal sealed class NotebookStore
 
         try
         {
+            this.WriteLogsUnlocked();
             this.Write(this.PathFor(this.current.ContentId), this.current);
         }
         catch (Exception ex)
@@ -1396,6 +1573,154 @@ internal sealed class NotebookStore
     }
 
     private string PathFor(ulong contentId) => Path.Combine(this.directory, contentId + ".json");
+
+    private void WriteLogsUnlocked()
+    {
+        if (this.current == null)
+            return;
+
+        try
+        {
+            Directory.CreateDirectory(this.logDirectory);
+        }
+        catch (Exception ex)
+        {
+            this.log.Error(ex, "Could not create the log folder.");
+            return;
+        }
+
+        var used = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var scene in this.current.Scenes)
+        {
+            var fileName = UniqueLogName(scene, used);
+            var previous = scene.LogFile;
+            scene.LogFile = fileName;
+            if (!string.IsNullOrWhiteSpace(previous)
+                && !string.Equals(previous, fileName, StringComparison.OrdinalIgnoreCase))
+                this.DeleteLog(previous);
+            try
+            {
+                this.WriteText(Path.Combine(this.logDirectory, fileName), LogText(scene));
+            }
+            catch (Exception ex)
+            {
+                this.log.Error(ex, "Could not write the log {File}.", fileName);
+            }
+        }
+    }
+
+    private void DeleteLog(string fileName)
+    {
+        if (string.IsNullOrWhiteSpace(fileName) || this.current == null)
+            return;
+
+        foreach (var scene in this.current.Scenes)
+        {
+            if (string.Equals(scene.LogFile, fileName, StringComparison.OrdinalIgnoreCase))
+                return;
+        }
+
+        try
+        {
+            var path = Path.Combine(this.logDirectory, fileName);
+            if (File.Exists(path))
+                File.Delete(path);
+        }
+        catch (Exception ex)
+        {
+            this.log.Error(ex, "Could not remove the old log {File}.", fileName);
+        }
+    }
+
+    private static string UniqueLogName(SceneRecord scene, HashSet<string> used)
+    {
+        var name = LogFileName(scene);
+        var unique = name;
+        var number = 2;
+        while (!used.Add(unique))
+        {
+            unique = Path.GetFileNameWithoutExtension(name) + " " + number + Path.GetExtension(name);
+            number++;
+        }
+
+        return unique;
+    }
+
+    private static string LogFileName(SceneRecord scene)
+    {
+        var when = scene.StartedAt.ToLocalTime();
+        var title = scene.Title?.Trim() ?? string.Empty;
+        var named = title.Length > 0 && !title.StartsWith("Scene · ", StringComparison.Ordinal);
+        if (!named)
+            return when.ToString("yyyy-MM-dd h-mm tt") + ".txt";
+
+        var safe = SanitizeFileName(title);
+        if (safe.Length == 0)
+            return when.ToString("yyyy-MM-dd h-mm tt") + ".txt";
+
+        return when.ToString("yyyy-MM-dd") + " " + safe + ".txt";
+    }
+
+    private static string SanitizeFileName(string value)
+    {
+        var invalid = Path.GetInvalidFileNameChars();
+        var chars = value.ToCharArray();
+        for (var i = 0; i < chars.Length; i++)
+        {
+            if (Array.IndexOf(invalid, chars[i]) >= 0)
+                chars[i] = ' ';
+        }
+
+        var cleaned = string.Join(' ', new string(chars).Split(' ', StringSplitOptions.RemoveEmptyEntries));
+        cleaned = cleaned.TrimEnd('.', ' ');
+        if (cleaned.Length > 80)
+            cleaned = cleaned[..80].TrimEnd('.', ' ');
+
+        return cleaned;
+    }
+
+    private static string LogText(SceneRecord scene)
+    {
+        var text = new StringBuilder();
+        var title = scene.Title?.Trim() ?? string.Empty;
+        if (title.Length > 0 && !title.StartsWith("Scene · ", StringComparison.Ordinal))
+            text.AppendLine(title);
+        if (!string.IsNullOrWhiteSpace(scene.Location))
+            text.AppendLine(scene.Location.Trim());
+        text.AppendLine(scene.StartedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt"));
+        if (!string.IsNullOrWhiteSpace(scene.Storyline))
+            text.AppendLine(scene.Storyline.Trim());
+        if (!string.IsNullOrWhiteSpace(scene.Description))
+        {
+            text.AppendLine();
+            text.AppendLine(scene.Description.Trim());
+        }
+
+        foreach (var line in scene.Lines)
+        {
+            var spoken = line.Text?.Trim() ?? string.Empty;
+            if (spoken.Length == 0)
+                continue;
+
+            text.AppendLine();
+            var speaker = line.Speaker?.Trim() ?? string.Empty;
+            if (speaker.Length == 0)
+                text.Append(spoken);
+            else if (line.Kind == LineKind.Emote)
+                text.Append(speaker).Append(' ').Append(spoken);
+            else
+                text.Append(speaker).Append(": ").Append(spoken);
+        }
+
+        return text.ToString().Trim() + Environment.NewLine;
+    }
+
+    private void WriteText(string path, string text)
+    {
+        var temp = path + ".tmp";
+        File.WriteAllText(temp, text);
+        File.Move(temp, path, overwrite: true);
+    }
 
     private static NotebookFile CreateFile(ulong contentId, string name, string world) => new()
     {

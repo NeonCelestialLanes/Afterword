@@ -63,6 +63,11 @@ internal sealed class MainWindow : Window, IDisposable
     private string storylineNotesDraft = string.Empty;
     private Guid storylineEditId;
     private Guid? openStorylineId;
+    private Guid? openWrittenStoryId;
+    private string writtenTitleDraft = string.Empty;
+    private string writtenBodyDraft = string.Empty;
+    private Guid writtenEditId;
+    private bool writtenDeleteArmed;
     private string newCharacter = string.Empty;
     private string characterNotesDraft = string.Empty;
     private string characterEditName = string.Empty;
@@ -76,6 +81,7 @@ internal sealed class MainWindow : Window, IDisposable
     private Guid? pendingLineDelete;
     private string splitTimeDraft = string.Empty;
     private string lineMessage = string.Empty;
+    private string logFolderMessage = string.Empty;
     private string openCharacter = string.Empty;
     private string placeDraft = string.Empty;
     private string scratchDraft = string.Empty;
@@ -252,6 +258,9 @@ internal sealed class MainWindow : Window, IDisposable
                 case Page.Storylines:
                     this.DrawStorylines(snapshot);
                     break;
+                case Page.Stories:
+                    this.DrawStories(snapshot);
+                    break;
                 case Page.Scratchpad:
                     this.DrawScratchpad();
                     break;
@@ -358,6 +367,7 @@ internal sealed class MainWindow : Window, IDisposable
         this.NavItem("My Notebook", Page.Notebook);
         this.NavItem("Characters", Page.Characters);
         this.NavItem("Storylines", Page.Storylines);
+        this.NavItem("Stories", Page.Stories);
         this.NavItem("Scratchpad", Page.Scratchpad);
         this.NavItem("Settings", Page.Settings);
         ImGui.EndChild();
@@ -403,6 +413,11 @@ internal sealed class MainWindow : Window, IDisposable
         }
         if (target != Page.Storylines)
             this.openStorylineId = null;
+        if (target != Page.Stories)
+        {
+            this.openWrittenStoryId = null;
+            this.writtenDeleteArmed = false;
+        }
         if (target != Page.Characters)
             this.openCharacter = string.Empty;
     }
@@ -475,6 +490,14 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.Spacing();
             ImGui.TextUnformatted(this.importMessage);
         }
+    }
+
+    private void OnLogFolderChosen(bool selected, string path)
+    {
+        if (!selected || string.IsNullOrWhiteSpace(path))
+            return;
+
+        this.logFolderMessage = this.recorder.SetLogFolder(path);
     }
 
     private void OpenImport(string storyline)
@@ -1311,7 +1334,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.TextUnformatted("Record these chats");
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextWrapped("Combat, loot, echoes, and other system lines are never recorded.");
+        ImGui.TextWrapped("Combat, loot, echoes, and other system lines are left out. Random rolls keep a /random, and that box stays off until you turn it on.");
         ImGui.PopStyleColor();
         ImGui.Spacing();
 
@@ -1335,6 +1358,39 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
         ImGui.TextWrapped("Leaves out text wrapped in [ ], ( ), or (( )). A line that only starts or ends with one of those is left out too.");
         ImGui.PopStyleColor();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Where logs are saved");
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Each scene is a text file in this folder. A scene with a title is named with the date and that title. A scene without a title is named with the date and time.");
+        ImGui.PopStyleColor();
+        ImGui.Spacing();
+        ImGui.TextWrapped(this.recorder.LogFolder);
+        ImGui.Spacing();
+        if (CoverButton("Choose a folder", new Vector2(160, 30)))
+        {
+            this.dialogs.OpenFolderDialog(
+                "Choose a folder for logs",
+                this.OnLogFolderChosen,
+                this.recorder.LogFolder,
+                true);
+        }
+
+        if (!this.recorder.IsUsualLogFolder)
+        {
+            ImGui.SameLine();
+            if (CoverButton("Usual place", new Vector2(140, 30)))
+                this.logFolderMessage = this.recorder.SetLogFolder(null);
+        }
+
+        if (!string.IsNullOrWhiteSpace(this.logFolderMessage))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped(this.logFolderMessage);
+            ImGui.PopStyleColor();
+        }
 
         ImGui.Spacing();
         ImGui.Separator();
@@ -1773,6 +1829,39 @@ internal sealed class MainWindow : Window, IDisposable
 
                 ImGui.PopID();
             }
+        }
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Stories");
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Long stories linked here are part of this storyline. Ones marked as lore are treated as background that happened.");
+        ImGui.PopStyleColor();
+        var linkedStories = new List<WrittenStory>();
+        foreach (var written in snapshot.Stories)
+        {
+            if (string.Equals(written.Storyline, story.Title, StringComparison.OrdinalIgnoreCase))
+                linkedStories.Add(written);
+        }
+
+        if (linkedStories.Count == 0)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextUnformatted("No stories linked yet.");
+            ImGui.PopStyleColor();
+        }
+
+        foreach (var written in linkedStories)
+        {
+            ImGui.PushID(written.Id.ToString());
+            var label = written.AffectsLore ? written.Title + "  ·  Lore" : written.Title;
+            if (CoverButton(label, new Vector2(-1, 32)))
+            {
+                this.openWrittenStoryId = written.Id;
+                this.page = Page.Stories;
+            }
+
+            ImGui.PopID();
+            ImGui.Spacing();
         }
 
         ImGui.Spacing();
@@ -2293,6 +2382,20 @@ internal sealed class MainWindow : Window, IDisposable
             AppendLines(text, scene.Lines, string.Empty);
         }
 
+        foreach (var written in snapshot.Stories)
+        {
+            if (!string.Equals(written.Storyline, story.Title, StringComparison.OrdinalIgnoreCase))
+                continue;
+
+            if (string.IsNullOrWhiteSpace(written.Body))
+                continue;
+
+            text.AppendLine();
+            text.AppendLine(written.AffectsLore ? "Lore:" : "Story:");
+            text.AppendLine(written.Title);
+            text.AppendLine(written.Body.Trim());
+        }
+
         return text.ToString().Trim();
     }
 
@@ -2690,6 +2793,154 @@ internal sealed class MainWindow : Window, IDisposable
         }
     }
 
+    private void DrawStories(NotebookSnapshot snapshot)
+    {
+        if (this.openWrittenStoryId != null)
+        {
+            WrittenStory? selected = null;
+            foreach (var story in snapshot.Stories)
+            {
+                if (story.Id == this.openWrittenStoryId)
+                {
+                    selected = story;
+                    break;
+                }
+            }
+
+            if (selected == null)
+                this.openWrittenStoryId = null;
+            else
+            {
+                this.DrawOpenStory(snapshot, selected);
+                return;
+            }
+        }
+
+        ImGui.TextUnformatted("Stories");
+        ImGui.Spacing();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Write a long story here. It can belong to a storyline, and you can mark it as lore when it should shape what came before.");
+        ImGui.PopStyleColor();
+        ImGui.Spacing();
+
+        if (!snapshot.IsLoggedIn)
+            ImGui.BeginDisabled();
+
+        if (CoverButton("New story", new Vector2(140, 32)) && this.recorder.AddWrittenStory(out var id))
+            this.openWrittenStoryId = id;
+
+        if (!snapshot.IsLoggedIn)
+        {
+            ImGui.EndDisabled();
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextUnformatted("Log into a character first. The story is saved with that character.");
+            ImGui.PopStyleColor();
+            return;
+        }
+
+        ImGui.Spacing();
+        if (snapshot.Stories.Count == 0)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextUnformatted("No stories yet.");
+            ImGui.PopStyleColor();
+            return;
+        }
+
+        var stories = new List<WrittenStory>(snapshot.Stories);
+        stories.Sort((a, b) => b.WrittenAt.CompareTo(a.WrittenAt));
+        foreach (var story in stories)
+        {
+            ImGui.PushID(story.Id.ToString());
+            if (CoverButton(story.Title, new Vector2(-1, 32)))
+                this.openWrittenStoryId = story.Id;
+            ImGui.PopID();
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            var where = string.IsNullOrWhiteSpace(story.Storyline) ? "No storyline yet" : story.Storyline;
+            var lore = story.AffectsLore ? "   ·   Lore" : string.Empty;
+            ImGui.TextUnformatted($"{story.WrittenAt.ToLocalTime():MMM d, yyyy}   ·   {where}{lore}");
+            ImGui.PopStyleColor();
+            ImGui.Spacing();
+        }
+    }
+
+    private void DrawOpenStory(NotebookSnapshot snapshot, WrittenStory story)
+    {
+        if (this.writtenEditId != story.Id)
+        {
+            this.writtenEditId = story.Id;
+            this.writtenTitleDraft = story.Title;
+            this.writtenBodyDraft = story.Body;
+            this.writtenDeleteArmed = false;
+        }
+
+        if (CoverButton("Back to stories", new Vector2(160, 30)))
+        {
+            this.openWrittenStoryId = null;
+            this.writtenDeleteArmed = false;
+            return;
+        }
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Title");
+        ImGui.SetNextItemWidth(-1);
+        if (ImGui.InputText("##written-title", ref this.writtenTitleDraft, 120))
+            this.recorder.SetWrittenStoryTitle(story.Id, this.writtenTitleDraft);
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Storyline");
+        var shown = string.IsNullOrWhiteSpace(story.Storyline) ? "None yet" : story.Storyline;
+        ImGui.SetNextItemWidth(280);
+        PushPaperPopup();
+        if (ImGui.BeginCombo("##written-storyline", shown))
+        {
+            if (ImGui.Selectable("None yet", string.IsNullOrWhiteSpace(story.Storyline)))
+                this.recorder.SetWrittenStoryStoryline(story.Id, string.Empty);
+
+            foreach (var line in snapshot.Storylines)
+            {
+                ImGui.PushID(line.Id.ToString());
+                var chosen = string.Equals(story.Storyline, line.Title, StringComparison.OrdinalIgnoreCase);
+                if (ImGui.Selectable(line.Title, chosen))
+                    this.recorder.SetWrittenStoryStoryline(story.Id, line.Title);
+                ImGui.PopID();
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.PopStyleColor(5);
+
+        ImGui.Spacing();
+        var lore = story.AffectsLore;
+        if (ImGui.Checkbox("This affects the lore", ref lore))
+            this.recorder.SetWrittenStoryLore(story.Id, lore);
+
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Lore is background that happened. A summary of the storyline can use it, and it does not retell the story as a scene.");
+        ImGui.PopStyleColor();
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Story");
+        if (ImGui.InputTextMultiline("##written-body", ref this.writtenBodyDraft, 20000, new Vector2(-1, 280)))
+            this.recorder.SetWrittenStoryBody(story.Id, this.writtenBodyDraft);
+
+        ImGui.Spacing();
+        if (CoverButton(this.writtenDeleteArmed ? "Delete?" : "Delete story", new Vector2(150, 30)))
+        {
+            if (!this.writtenDeleteArmed)
+            {
+                this.writtenDeleteArmed = true;
+            }
+            else
+            {
+                this.recorder.RemoveWrittenStory(story.Id);
+                this.openWrittenStoryId = null;
+                this.writtenDeleteArmed = false;
+            }
+        }
+    }
+
     private static void DrawPlaceholder(string title, string message)
     {
         ImGui.TextUnformatted(title);
@@ -2727,6 +2978,7 @@ internal sealed class MainWindow : Window, IDisposable
         Notebook,
         Characters,
         Storylines,
+        Stories,
         Scratchpad,
         Settings,
     }

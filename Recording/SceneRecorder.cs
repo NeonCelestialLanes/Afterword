@@ -50,6 +50,23 @@ internal sealed class SceneRecorder
 
     public RecordingSettings Settings => this.settings;
 
+    public string LogFolder => this.store.LogFolder;
+
+    public string UsualLogFolder => this.store.UsualLogFolder;
+
+    public bool IsUsualLogFolder => this.store.IsUsualLogFolder;
+
+    public string SetLogFolder(string? folder)
+    {
+        var message = this.store.UseLogFolder(folder, out var changed);
+        if (!changed)
+            return message;
+
+        this.settings.LogFolder = this.store.IsUsualLogFolder ? string.Empty : this.store.LogFolder;
+        this.settings.Save();
+        return message;
+    }
+
     public string CurrentPlace
     {
         get
@@ -184,6 +201,18 @@ internal sealed class SceneRecorder
 
     public void RemoveStoryline(Guid id) => this.store.RemoveStoryline(id);
 
+    public bool AddWrittenStory(out Guid id) => this.store.AddWrittenStory(out id);
+
+    public void SetWrittenStoryTitle(Guid id, string title) => this.store.SetWrittenStoryTitle(id, title);
+
+    public void SetWrittenStoryBody(Guid id, string body) => this.store.SetWrittenStoryBody(id, body);
+
+    public void SetWrittenStoryStoryline(Guid id, string title) => this.store.SetWrittenStoryStoryline(id, title);
+
+    public void SetWrittenStoryLore(Guid id, bool affectsLore) => this.store.SetWrittenStoryLore(id, affectsLore);
+
+    public void RemoveWrittenStory(Guid id) => this.store.RemoveWrittenStory(id);
+
     public void SetSceneStoryline(Guid sceneId, string title) => this.store.SetSceneStoryline(sceneId, title);
 
     public void SetSceneLocation(Guid sceneId, string location) => this.store.SetSceneLocation(sceneId, location);
@@ -252,6 +281,26 @@ internal sealed class SceneRecorder
 
     public void Capture(XivChatType type, string speaker, string text, int timestamp)
     {
+        if (type == XivChatType.RandomNumber)
+        {
+            if (!this.settings.Allows(ChatChannel.Random))
+                return;
+
+            var self = this.playerState.IsLoaded ? this.playerState.CharacterName ?? string.Empty : string.Empty;
+            if (!RandomRolls.TryRead(speaker, text, self, out var roller, out var rolled))
+                return;
+
+            this.store.AppendLine(new SceneLine
+            {
+                At = FromGameTime(timestamp),
+                Speaker = roller,
+                Channel = "Random rolls",
+                Kind = LineKind.Emote,
+                Text = rolled,
+            });
+            return;
+        }
+
         if (!SupportedChat.TryClassify(type, out var channel) || !this.settings.Allows(channel))
             return;
 

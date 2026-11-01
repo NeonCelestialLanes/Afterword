@@ -48,6 +48,16 @@ public sealed class Plugin : IDalamudPlugin
         var chatGpt = new ChatGptSession(pluginInterface.GetPluginConfigDirectory());
         var grok = new GrokSession(pluginInterface.GetPluginConfigDirectory());
         var store = new NotebookStore(pluginInterface.GetPluginConfigDirectory(), log);
+        if (!string.IsNullOrWhiteSpace(settings.LogFolder))
+        {
+            store.UseLogFolder(settings.LogFolder, out var opened);
+            if (!opened)
+            {
+                settings.LogFolder = string.Empty;
+                settings.Save();
+            }
+        }
+
         this.recorder = new SceneRecorder(store, settings, objectTable, playerState, clientState, dataManager, chatGui, log);
 
         var window = new MainWindow(pluginInterface, textures, this.recorder, summarySettings, chatGpt, grok);

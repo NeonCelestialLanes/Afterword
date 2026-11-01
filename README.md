@@ -18,7 +18,7 @@ You need to be logged into a character. Each character has their own notebook.
 
 Say and emote are on by default. Shout, yell, tell, party, alliance, free company, linkshells, and Novice Network stay off until you turn them on in Settings.
 
-A `/random` is kept only when **Random rolls** is on. The line is saved as that person rolling a number out of a maximum. Loot rolls, combat, echoes, and other system text are left out.
+**Random rolls** is in Settings with the other chats. It is off until you turn it on. A `/random` is then saved as that person rolling a number out of a maximum. Loot rolls, combat, echoes, and other system text stay out.
 
 Out-of-character text is skipped when that setting is on. Text wrapped in `[ ]`, `( )`, or `(( ))` is removed. A line that only starts or ends with one of those marks is left out, and the rest of a mixed line is kept.
 
@@ -78,7 +78,11 @@ A storyline groups scenes that share a name.
 - **Ongoing** or **Completed** marks whether the story is still in play.
 - The storyline has its own summary, notes, and scene list.
 
-Deleting a storyline removes the group. The scenes remain in the notebook.
+Deleting a storyline removes the group. The scenes remain in the notebook. A long story that was linked to it stays in Stories, with the storyline cleared.
+
+## Stories
+
+**Stories** is for long writing, not a chat log. A story can be attached to a storyline. **This affects the lore** marks it as background that happened. When you summarize that storyline, the story is included as lore instead of as another scene.
 
 ## Summaries
 
@@ -101,10 +105,13 @@ Everything for this plugin is under:
 | File | What it holds |
 | --- | --- |
 | `notebooks\` | One notebook for each character |
+| `logs\` | One text file per scene, unless Settings points somewhere else |
 | `recording-settings.json` | Which chats are kept |
 | `summary-settings.json` | ChatGPT or Grok |
 | `chatgpt-login.json` | The ChatGPT sign-in, if you used it |
 | `grok-login.json` | The Grok sign-in, if you used it |
+
+Settings has **Where logs are saved**. Choose a folder, or use the usual place. A scene with a title is saved as the date and that title, such as `2026-11-01 The Frostbite after Ishgard.txt`. A scene without a title is saved as the date and time, such as `2026-11-01 4-57 PM.txt`.
 
 If the game closes while a scene is recording, the lines already kept are saved and the scene is paused.
 

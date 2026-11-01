@@ -24,6 +24,8 @@ internal sealed class NotebookFile
 
     public List<StorylineRecord> Storylines { get; set; } = new();
 
+    public List<WrittenStory> Stories { get; set; } = new();
+
     public List<JournalNote> Notes { get; set; } = new();
 }
 
@@ -87,6 +89,9 @@ internal sealed class SceneRecord
 
     public List<SceneLine> Lines { get; set; } = new();
 
+    /// <summary>The log file last written for this scene, so a rename can replace it.</summary>
+    public string LogFile { get; set; } = string.Empty;
+
     public SceneRecord Copy()
     {
         var copy = new SceneRecord
@@ -107,6 +112,7 @@ internal sealed class SceneRecord
             Tags = new List<string>(this.Tags),
             SelectedSpeakers = new List<string>(this.SelectedSpeakers),
             Lines = new List<SceneLine>(this.Lines.Count),
+            LogFile = this.LogFile,
         };
 
         foreach (var line in this.Lines)
@@ -181,6 +187,24 @@ internal sealed class JournalNote
 
     public DateTimeOffset WrittenAt { get; set; }
 }
+
+/// <summary>
+/// A long piece of prose. It can belong to a storyline, and it can be marked as lore.
+/// </summary>
+internal sealed class WrittenStory
+{
+    public Guid Id { get; set; }
+
+    public string Title { get; set; } = "New story";
+
+    public string Body { get; set; } = string.Empty;
+
+    public string Storyline { get; set; } = string.Empty;
+
+    public bool AffectsLore { get; set; }
+
+    public DateTimeOffset WrittenAt { get; set; }
+}
 internal sealed class NotebookSnapshot
 {
     public bool IsLoggedIn { get; init; }
@@ -194,6 +218,8 @@ internal sealed class NotebookSnapshot
     public IReadOnlyList<CharacterProfile> Characters { get; init; } = Array.Empty<CharacterProfile>();
 
     public IReadOnlyList<StorylineRecord> Storylines { get; init; } = Array.Empty<StorylineRecord>();
+
+    public IReadOnlyList<WrittenStory> Stories { get; init; } = Array.Empty<WrittenStory>();
 
     public IReadOnlyList<JournalNote> Notes { get; init; } = Array.Empty<JournalNote>();
 

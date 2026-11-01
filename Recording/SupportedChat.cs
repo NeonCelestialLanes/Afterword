@@ -60,6 +60,7 @@ internal static class SupportedChat
         ChatChannel.Linkshell => "Linkshell",
         ChatChannel.CrossWorldLinkshell => "Cross-world linkshell",
         ChatChannel.NoviceNetwork => "Novice Network",
+        ChatChannel.Random => "Random rolls",
         _ => "Say",
     };
 }
