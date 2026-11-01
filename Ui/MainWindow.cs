@@ -369,7 +369,9 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.Image(wrap!.Handle, new Vector2(width, height));
 
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.CoverMuted);
+        ImGui.SetWindowFontScale(0.82f);
         ImGui.TextUnformatted("a private journal");
+        ImGui.SetWindowFontScale(1f);
         ImGui.PopStyleColor();
 
         ImGui.Dummy(new Vector2(0, 6));
@@ -416,7 +418,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         var selected = this.page == target;
         var width = Math.Max(32f, ImGui.GetContentRegionAvail().X);
-        var pressed = ImGui.InvisibleButton(label, new Vector2(width, 30));
+        var pressed = ImGui.InvisibleButton(label, new Vector2(width, 38));
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
         var hovered = ImGui.IsItemHovered();
@@ -450,7 +452,7 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         var textSize = ImGui.CalcTextSize(label);
-        var textPos = new Vector2(min.X + 8f, min.Y + ((30f - textSize.Y) * 0.5f));
+        var textPos = new Vector2(min.X + 8f, min.Y + ((38f - textSize.Y) * 0.5f));
         draw.AddText(textPos, ImGui.GetColorU32(JournalTheme.CoverInk), label);
 
         if (!pressed)
@@ -1766,7 +1768,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         return pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
         {
-            toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 16 });
+            toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 23 });
         }));
     }
 

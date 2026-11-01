@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
 using Dalamud.Plugin.Services;
 using RPChronicles.Data;
@@ -365,29 +366,32 @@ internal sealed class SceneRecorder
 
     private void RememberCharacter()
     {
-        if (this.playerState.ContentId == 0)
+        if (!this.playerState.IsLoaded || this.playerState.ContentId == 0)
             return;
 
         var name = PlayerNames.Clean(this.playerState.CharacterName ?? string.Empty);
-        if (string.IsNullOrWhiteSpace(name))
-        {
-            try
-            {
-                name = PlayerNames.Clean(this.objects.LocalPlayer?.Name.TextValue ?? string.Empty);
-            }
-            catch (Exception ex)
-            {
-                this.log.Warning(ex, "Could not read the current character.");
-            }
-        }
-
-        if (string.IsNullOrWhiteSpace(name) && !this.playerState.IsLoaded)
+        var world = LocationNames.HomeWorldName(this.playerState);
+        if (string.IsNullOrWhiteSpace(name) || string.IsNullOrWhiteSpace(world))
             return;
 
-        this.store.LoadCharacter(
-            this.playerState.ContentId,
-            name ?? string.Empty,
-            LocationNames.WorldName(this.playerState));
+        try
+        {
+            if (this.objects.LocalPlayer is not IPlayerCharacter local)
+                return;
+
+            var localName = PlayerNames.Clean(local.Name.TextValue ?? string.Empty);
+            var localWorld = LocationNames.HomeWorldName(local);
+            if (!string.Equals(localName, name, StringComparison.Ordinal)
+                || !string.Equals(localWorld, world, StringComparison.Ordinal))
+                return;
+        }
+        catch (Exception ex)
+        {
+            this.log.Warning(ex, "Could not read the current character.");
+            return;
+        }
+
+        this.store.LoadCharacter(this.playerState.ContentId, name, world);
     }
 
     private static DateTimeOffset FromGameTime(int timestamp)

@@ -34,11 +34,16 @@ internal static class LocationNames
         }
     }
 
-    public static string WorldName(IPlayerState player)
+    /// <summary>The character's home world, not the world they are visiting.</summary>
+    public static string HomeWorldName(IPlayerState player) => ReadWorld(player.HomeWorld);
+
+    public static string HomeWorldName(Dalamud.Game.ClientState.Objects.SubKinds.IPlayerCharacter player) =>
+        ReadWorld(player.HomeWorld);
+
+    private static string ReadWorld(Lumina.Excel.RowRef<World> world)
     {
         try
         {
-            var world = player.CurrentWorld;
             if (!world.IsValid)
                 return string.Empty;
 
