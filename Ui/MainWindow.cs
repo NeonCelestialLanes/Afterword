@@ -230,7 +230,7 @@ internal sealed class MainWindow : Window, IDisposable
         var pageSize = new Vector2(Math.Max(80, available.X - 8), Math.Max(80, available.Y - 8));
         DrawPageDeck(origin, pageSize);
 
-        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(28, 12));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(28, 24));
         ImGui.PushStyleColor(ImGuiCol.ChildBg, JournalTheme.Paper);
         var pageOpen = ImGui.BeginChild("page", pageSize, false);
         ImGui.PopStyleColor();
@@ -500,7 +500,7 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.PopStyleColor(5);
-        ImGui.Spacing();
+        ImGui.Dummy(new Vector2(0, 8));
     }
 
     private void CloseOpenPages()
