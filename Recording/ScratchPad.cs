@@ -5,7 +5,8 @@ using System.Text;
 namespace RPChronicles.Recording;
 
 /// <summary>
-/// Splits a post so each piece fits in the FFXIV chat box, breaking on a sentence when it can.
+/// Splits a post so each piece fits in the FFXIV chat box.
+/// A new piece starts at a quote or at the next plain sentence, and falls back to a sentence inside a quote only when that quote is too long.
 /// </summary>
 internal static class ScratchPad
 {
@@ -130,6 +131,14 @@ internal static class ScratchPad
         if (max == start)
             return Math.Min(text.Length, start + 1);
 
+        var outside = LastOutsideBreak(text, start, max);
+        if (outside > start)
+            return outside;
+
+        var opener = UnclosedSpanStart(text, start, max);
+        if (opener > start)
+            return opener;
+
         var sentence = LastSentenceEnd(text, start, max);
         if (sentence > start)
             return sentence;
@@ -139,6 +148,74 @@ internal static class ScratchPad
             return space;
 
         return max;
+    }
+
+    /// <summary>
+    /// The latest sentence end that is not inside a quote.
+    /// The next piece then starts at that quote, or at the next plain action.
+    /// </summary>
+    private static int LastOutsideBreak(string text, int start, int max)
+    {
+        var inQuote = false;
+        var quoteAt = -1;
+        for (var i = 0; i < start; i++)
+            MoveQuote(text[i], i, ref inQuote, ref quoteAt);
+
+        var best = -1;
+        for (var i = start; i < max; i++)
+        {
+            MoveQuote(text[i], i, ref inQuote, ref quoteAt);
+            if (text[i] == ' ' && !inQuote && IsSentenceEnd(text, start, i))
+                best = i;
+        }
+
+        return best;
+    }
+
+    /// <summary>
+    /// When the limit falls inside a quote, return the mark that opened it
+    /// so the next piece starts there.
+    /// </summary>
+    private static int UnclosedSpanStart(string text, int start, int max)
+    {
+        var inQuote = false;
+        var quoteAt = -1;
+        var end = Math.Min(max, text.Length);
+        for (var i = 0; i < end; i++)
+            MoveQuote(text[i], i, ref inQuote, ref quoteAt);
+
+        return inQuote && quoteAt > start ? quoteAt : -1;
+    }
+
+    private static void MoveQuote(char c, int index, ref bool inQuote, ref int quoteAt)
+    {
+        if (c is '\u201C' or '«')
+        {
+            inQuote = true;
+            quoteAt = index;
+            return;
+        }
+
+        if (c is '\u201D' or '»')
+        {
+            inQuote = false;
+            quoteAt = -1;
+            return;
+        }
+
+        if (c != '"')
+            return;
+
+        if (inQuote)
+        {
+            inQuote = false;
+            quoteAt = -1;
+        }
+        else
+        {
+            inQuote = true;
+            quoteAt = index;
+        }
     }
 
     private static int LastSentenceEnd(string text, int start, int max)
@@ -155,9 +232,12 @@ internal static class ScratchPad
     private static bool IsSentenceEnd(string text, int start, int boundary)
     {
         var index = boundary - 1;
-        while (index > start && "\"')*".Contains(text[index]))
+        while (index > start && IsTrailingMark(text[index]))
             index--;
 
         return index >= start && ".?!".Contains(text[index]);
     }
+
+    private static bool IsTrailingMark(char c) =>
+        c is '"' or '\'' or ')' or '\u201C' or '\u201D' or '\u2018' or '\u2019' or '«' or '»';
 }

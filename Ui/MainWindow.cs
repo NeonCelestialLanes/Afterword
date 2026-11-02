@@ -61,6 +61,7 @@ internal sealed class MainWindow : Window, IDisposable
     private string storylineNoteBodyDraft = string.Empty;
     private Guid storylineNoteEditId;
     private string notebookSearch = string.Empty;
+    private string sceneSearch = string.Empty;
     private bool scenesNewestFirst = true;
     private string newStoryline = string.Empty;
     private string storylineTitleDraft = string.Empty;
@@ -1299,6 +1300,7 @@ internal sealed class MainWindow : Window, IDisposable
         {
             this.renameSceneId = scene.Id;
             this.renameDraft = scene.Title;
+            this.sceneSearch = string.Empty;
         }
 
         ImGui.SetNextItemWidth(-1);
@@ -1343,13 +1345,36 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.TextUnformatted("Lines");
         ImGui.SameLine();
+        var keyword = this.sceneSearch.Trim();
+        var matches = 0;
+        if (keyword.Length > 0)
+        {
+            foreach (var line in scene.Lines)
+            {
+                if (MatchesKeyword(keyword, line.Speaker, line.Text))
+                    matches++;
+            }
+        }
+
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextUnformatted(scene.Lines.Count == 0
-            ? "What people say shows up here."
-            : scene.Lines.Count == 1 ? "1 so far" : $"{scene.Lines.Count} so far");
+        if (keyword.Length == 0)
+        {
+            ImGui.TextUnformatted(scene.Lines.Count == 0
+                ? "What people say shows up here."
+                : scene.Lines.Count == 1 ? "1 so far" : $"{scene.Lines.Count} so far");
+        }
+        else
+        {
+            ImGui.TextUnformatted(matches == 0
+                ? "No lines have that word."
+                : matches == 1 ? "1 line" : $"{matches} lines");
+        }
+
         ImGui.PopStyleColor();
+        ImGui.SetNextItemWidth(-1);
+        ImGui.InputTextWithHint("##scene-search", "Search this scene", ref this.sceneSearch, 80);
         var linesHeight = Math.Max(220f, ImGui.GetContentRegionAvail().Y - 132f);
-        this.DrawTranscript(scene, linesHeight);
+        this.DrawTranscript(scene, linesHeight, keyword);
         ImGui.Spacing();
         this.DrawCast(live: true, scene: scene);
     }
@@ -1813,9 +1838,10 @@ internal sealed class MainWindow : Window, IDisposable
         return true;
     }
 
-    private void DrawTranscript(SceneRecord scene, float height = 0f)
+    private void DrawTranscript(SceneRecord scene, float height = 0f, string? keyword = null)
     {
         var live = height > 0f;
+        var filter = keyword?.Trim() ?? string.Empty;
         if (live)
             ImGui.PushStyleColor(ImGuiCol.ChildBg, JournalTheme.PaperInset);
 
@@ -1826,6 +1852,7 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.Indent(8f);
         }
 
+        var any = false;
         if (scene.Lines.Count == 0)
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
@@ -1837,10 +1864,23 @@ internal sealed class MainWindow : Window, IDisposable
         else
         {
             foreach (var line in scene.Lines)
+            {
+                if (filter.Length > 0 && !MatchesKeyword(filter, line.Speaker, line.Text))
+                    continue;
+
+                any = true;
                 this.DrawLine(scene, line);
+            }
+
+            if (!any)
+            {
+                ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+                ImGui.TextUnformatted("Nothing in this scene has that word.");
+                ImGui.PopStyleColor();
+            }
         }
 
-        if (scene.Id != this.scrolledSceneId || scene.Lines.Count != this.scrolledLineCount)
+        if (filter.Length == 0 && (scene.Id != this.scrolledSceneId || scene.Lines.Count != this.scrolledLineCount))
         {
             if (scene.Status == SceneStatus.Recording)
                 ImGui.SetScrollHereY(1f);
@@ -3735,7 +3775,7 @@ internal sealed class MainWindow : Window, IDisposable
         {
             ImGui.Spacing();
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-            ImGui.TextWrapped("Write the post. Afterword fills each chat line, breaks on a sentence when it can, and numbers the pieces 1/2, 2/2.");
+            ImGui.TextWrapped("Write the post. Afterword fills each chat line, starts the next piece at a quote or the next sentence, and numbers the pieces 1/2, 2/2.");
             ImGui.PopStyleColor();
         }
 

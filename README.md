@@ -51,7 +51,7 @@ That is the link Dalamud reads. Afterword then shows up in the plugin installer.
 
 **Pause** holds the scene and stops new lines. **Stop and save** puts it in My Notebook.
 
-While a scene is recording, what people say shows up under **Lines**. You can still change who is included. Mini uses that same choice.
+While a scene is recording, what people say shows up under **Lines**. In the full window, **Search this scene** finds a word in a name or a line. Mini does not have that search. You can still change who is included. Mini uses that same choice.
 
 Say and emote are on by default. Shout, yell, tell, party, alliance, free company, linkshells, and Novice Network stay off until you turn them on in Settings.
 
@@ -89,7 +89,7 @@ A line can start with a tag and a name:
 
 ## Scratchpad
 
-**Scratchpad** is in the sidebar, under Storylines. Paste or write a post. Afterword splits it so each piece fits in the chat box, breaks on a sentence when it can, and numbers the pieces `(1/2)`, `(2/2)`, and so on.
+**Scratchpad** is in the sidebar, under Storylines. Paste or write a post. Afterword splits it so each piece fits in the chat box. The next piece starts at a quote or at the next sentence. It does not look for asterisks. The pieces are numbered `(1/2)`, `(2/2)`, and so on.
 
 The words wrap inside the box. A blank line starts a new paragraph.
 
