@@ -67,6 +67,7 @@ Open a scene from **My Notebook**.
 
 - Edit a speaker or a line. **Delete line** asks you to press it again.
 - **New scene starts at** takes a clock time, such as `10:45 AM`. Lines from that time on become a new scene. The scene you are in keeps the earlier lines. **New scene** on a line does the same from that line.
+- **Combine with another log** moves that log's lines into the one you have open, in the order they were said. This log keeps its name. The other log is removed. It asks you to press **Combine?** before it does that.
 - Attach the scene to a storyline.
 - Ask for a summary, or type one yourself.
 

@@ -85,6 +85,8 @@ internal sealed class MainWindow : Window, IDisposable
     private Guid? pendingLineDelete;
     private string splitTimeDraft = string.Empty;
     private string lineMessage = string.Empty;
+    private Guid? combineLogId;
+    private bool combineLogArmed;
     private string logFolderMessage = string.Empty;
     private string openCharacter = string.Empty;
     private string placeDraft = string.Empty;
@@ -1600,6 +1602,8 @@ internal sealed class MainWindow : Window, IDisposable
             this.pendingLineDelete = null;
             this.lineMessage = string.Empty;
             this.splitTimeDraft = string.Empty;
+            this.combineLogId = null;
+            this.combineLogArmed = false;
         }
 
         ImGui.TextUnformatted("New scene starts at");
@@ -1612,6 +1616,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
         ImGui.TextWrapped("Lines from that time on become their own scene. This one keeps the earlier lines. You can also edit a line below.");
         ImGui.PopStyleColor();
+        this.DrawCombineLogs(scene);
         if (!string.IsNullOrWhiteSpace(this.lineMessage))
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
@@ -1664,6 +1669,101 @@ internal sealed class MainWindow : Window, IDisposable
         this.editingLineId = null;
         this.pendingLineDelete = null;
         this.lineMessage = "Lines from " + label + " are a new scene in the notebook. This one keeps the earlier lines.";
+    }
+
+    private void DrawCombineLogs(SceneRecord scene)
+    {
+        var others = new List<SceneRecord>();
+        foreach (var candidate in this.recorder.Snapshot().Scenes)
+        {
+            if (candidate.Id == scene.Id || candidate.Status != SceneStatus.Saved)
+                continue;
+
+            others.Add(candidate);
+        }
+
+        others.Sort((left, right) => left.StartedAt.CompareTo(right.StartedAt));
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Combine with another log");
+        if (others.Count == 0)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped("There are no other saved logs to combine with this one.");
+            ImGui.PopStyleColor();
+            return;
+        }
+
+        SceneRecord? chosen = null;
+        foreach (var candidate in others)
+        {
+            if (candidate.Id == this.combineLogId)
+            {
+                chosen = candidate;
+                break;
+            }
+        }
+
+        chosen ??= others[0];
+        if (this.combineLogId != chosen.Id)
+        {
+            this.combineLogId = chosen.Id;
+            this.combineLogArmed = false;
+        }
+
+        ImGui.SetNextItemWidth(-1f);
+        PushPaperPopup();
+        if (ImGui.BeginCombo("##combine-log", LogChoiceLabel(chosen)))
+        {
+            foreach (var candidate in others)
+            {
+                ImGui.PushID(candidate.Id.ToString());
+                if (ImGui.Selectable(LogChoiceLabel(candidate), candidate.Id == chosen.Id))
+                {
+                    this.combineLogId = candidate.Id;
+                    this.combineLogArmed = false;
+                }
+
+                ImGui.PopID();
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.PopStyleColor(5);
+        var label = this.combineLogArmed ? "Combine?##logs" : "Combine##logs";
+        if (CoverButton(label, new Vector2(this.combineLogArmed ? 120 : 110, 28)) && this.combineLogId is Guid otherId)
+        {
+            if (!this.combineLogArmed)
+            {
+                this.combineLogArmed = true;
+            }
+            else if (this.recorder.CombineScenes(scene.Id, otherId))
+            {
+                this.combineLogArmed = false;
+                this.combineLogId = null;
+                this.editingLineId = null;
+                this.pendingLineDelete = null;
+                this.lineMessage = "Those lines are in this log now, in the order they were said. The other log was removed.";
+            }
+            else
+            {
+                this.combineLogArmed = false;
+                this.lineMessage = "Those two logs could not be combined.";
+            }
+        }
+
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("The other log's lines move into this one. This log keeps its name. The other log is removed. Press Combine? to confirm.");
+        ImGui.PopStyleColor();
+    }
+
+    private static string LogChoiceLabel(SceneRecord scene)
+    {
+        var title = string.IsNullOrWhiteSpace(scene.Title) ? "Untitled" : scene.Title.Trim();
+        var when = scene.StartedAt.ToLocalTime().ToString("MMM d, yyyy h:mm tt");
+        var count = scene.Lines?.Count ?? 0;
+        var lines = count == 1 ? "1 line" : count + " lines";
+        return title + " · " + when + " · " + lines;
     }
 
     private static bool TryParseClock(string text, SceneRecord scene, out DateTimeOffset start)

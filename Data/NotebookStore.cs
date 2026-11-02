@@ -538,6 +538,105 @@ internal sealed class NotebookStore
         }
     }
 
+    public bool CombineScenes(Guid keepId, Guid otherId)
+    {
+        lock (this.gate)
+        {
+            if (keepId == otherId || this.current == null)
+                return false;
+
+            var keep = this.FindUnlocked(keepId);
+            var other = this.FindUnlocked(otherId);
+            if (keep == null || other == null)
+                return false;
+
+            if (keep.Status != SceneStatus.Saved || other.Status != SceneStatus.Saved)
+                return false;
+
+            keep.Lines ??= new List<SceneLine>();
+            other.Lines ??= new List<SceneLine>();
+            var merged = new List<(DateTimeOffset At, int Order, SceneLine Line)>(keep.Lines.Count + other.Lines.Count);
+            var order = 0;
+            foreach (var line in keep.Lines)
+                merged.Add((line.At, order++, line));
+            foreach (var line in other.Lines)
+                merged.Add((line.At, order++, line));
+
+            merged.Sort((left, right) =>
+            {
+                var time = left.At.CompareTo(right.At);
+                return time != 0 ? time : left.Order.CompareTo(right.Order);
+            });
+
+            keep.Lines = new List<SceneLine>(merged.Count);
+            foreach (var item in merged)
+                keep.Lines.Add(item.Line);
+
+            this.Restamp(keep);
+            if (string.IsNullOrWhiteSpace(keep.Location))
+                keep.Location = other.Location;
+            if (string.IsNullOrWhiteSpace(keep.Storyline))
+                keep.Storyline = other.Storyline;
+            if (string.IsNullOrWhiteSpace(keep.Summary))
+            {
+                keep.Summary = other.Summary;
+                keep.SummaryRevision = other.SummaryRevision;
+            }
+
+            if (string.IsNullOrWhiteSpace(keep.Notes))
+                keep.Notes = other.Notes;
+            if (string.IsNullOrWhiteSpace(keep.Description))
+                keep.Description = other.Description;
+
+            MergeCast(keep, other);
+            MergeTags(keep, other);
+
+            var logFile = other.LogFile;
+            other.LogFile = string.Empty;
+            this.current.Scenes.Remove(other);
+            this.DeleteLog(logFile);
+            this.SaveUnlocked();
+            return true;
+        }
+    }
+
+    private static void MergeCast(SceneRecord keep, SceneRecord other)
+    {
+        if (keep.Mode == RecordingMode.Everyone || other.Mode == RecordingMode.Everyone)
+        {
+            keep.Mode = RecordingMode.Everyone;
+            return;
+        }
+
+        keep.SelectedSpeakers ??= new List<string>();
+        other.SelectedSpeakers ??= new List<string>();
+        foreach (var name in other.SelectedSpeakers)
+        {
+            if (keep.SelectedSpeakers.Exists(existing => string.Equals(existing, name, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            keep.SelectedSpeakers.Add(name);
+        }
+    }
+
+    private static void MergeTags(SceneRecord keep, SceneRecord other)
+    {
+        keep.Tags ??= new List<string>();
+        if (other.Tags == null)
+            return;
+
+        foreach (var tag in other.Tags)
+        {
+            if (string.IsNullOrWhiteSpace(tag))
+                continue;
+
+            if (keep.Tags.Exists(existing => string.Equals(existing, tag, StringComparison.OrdinalIgnoreCase)))
+                continue;
+
+            keep.Tags.Add(tag);
+        }
+    }
+
     public bool AddNote(out Guid id)
     {
         id = Guid.Empty;

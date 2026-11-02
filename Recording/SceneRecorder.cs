@@ -191,6 +191,8 @@ internal sealed class SceneRecorder
 
     public bool SplitScene(Guid sceneId, int firstLine, out Guid newSceneId) => this.store.SplitScene(sceneId, firstLine, out newSceneId);
 
+    public bool CombineScenes(Guid keepId, Guid otherId) => this.store.CombineScenes(keepId, otherId);
+
     public bool AddNote(out Guid id) => this.store.AddNote(out id);
 
     public void SetNoteTitle(Guid id, string title) => this.store.SetNoteTitle(id, title);
