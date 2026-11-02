@@ -1000,9 +1000,17 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        this.DrawCast(live: true, scene: scene);
+        ImGui.TextUnformatted("Lines");
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextUnformatted(scene.Lines.Count == 0
+            ? "What people say shows up here."
+            : scene.Lines.Count == 1 ? "1 so far" : $"{scene.Lines.Count} so far");
+        ImGui.PopStyleColor();
+        var linesHeight = Math.Max(220f, ImGui.GetContentRegionAvail().Y - 132f);
+        this.DrawTranscript(scene, linesHeight);
         ImGui.Spacing();
-        this.DrawTranscript(scene);
+        this.DrawCast(live: true, scene: scene);
     }
 
     private void DrawNotebook(NotebookSnapshot snapshot)
@@ -1338,14 +1346,24 @@ internal sealed class MainWindow : Window, IDisposable
         return true;
     }
 
-    private void DrawTranscript(SceneRecord scene)
+    private void DrawTranscript(SceneRecord scene, float height = 0f)
     {
-        ImGui.BeginChild("transcript", new Vector2(0, 0), false);
+        var live = height > 0f;
+        if (live)
+            ImGui.PushStyleColor(ImGuiCol.ChildBg, JournalTheme.PaperInset);
+
+        ImGui.BeginChild("transcript", new Vector2(0, height), false);
+        if (live)
+        {
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8f);
+            ImGui.Indent(8f);
+        }
+
         if (scene.Lines.Count == 0)
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
             ImGui.TextUnformatted(scene.Status == SceneStatus.Recording
-                ? "Waiting for /say or an emote."
+                ? "Nothing yet."
                 : "This scene has no lines yet.");
             ImGui.PopStyleColor();
         }
@@ -1364,7 +1382,12 @@ internal sealed class MainWindow : Window, IDisposable
             this.scrolledLineCount = scene.Lines.Count;
         }
 
+        if (live)
+            ImGui.Unindent(8f);
+
         ImGui.EndChild();
+        if (live)
+            ImGui.PopStyleColor();
     }
 
     private void DrawLine(SceneRecord scene, SceneLine line)
@@ -2944,6 +2967,77 @@ internal sealed class MainWindow : Window, IDisposable
         return names;
     }
 
+    private static float ScratchWrapWidth()
+    {
+        var style = ImGui.GetStyle();
+        return ImGui.GetContentRegionAvail().X - (style.FramePadding.X * 2f) - style.ScrollbarSize;
+    }
+
+    private static int WrapScratchBox(ref ImGuiInputTextCallbackData data, ref float wrapWidth)
+    {
+        if (wrapWidth < 48f || data.BufTextLen <= 0)
+            return 0;
+
+        var text = Encoding.UTF8.GetString(data.BufTextSpan);
+        var inserts = new List<int>();
+        var lineStart = 0;
+        for (var i = 0; i <= text.Length; i++)
+        {
+            if (i < text.Length && text[i] != '\n')
+                continue;
+
+            WrapScratchLine(text, lineStart, i, wrapWidth, inserts);
+            lineStart = i + 1;
+        }
+
+        for (var n = inserts.Count - 1; n >= 0; n--)
+            data.InsertChars(Encoding.UTF8.GetByteCount(text.AsSpan(0, inserts[n])), "\n");
+
+        return 0;
+    }
+
+    private static void WrapScratchLine(string text, int start, int end, float wrapWidth, List<int> inserts)
+    {
+        while (start < end)
+        {
+            if (ImGui.CalcTextSize(text.AsSpan(start, end - start), false, 0f).X <= wrapWidth)
+                return;
+
+            var cut = FindScratchBreak(text, start, end, wrapWidth);
+            if (cut <= start || cut >= end)
+                return;
+
+            inserts.Add(cut);
+            start = cut;
+        }
+    }
+
+    private static int FindScratchBreak(string text, int start, int end, float wrapWidth)
+    {
+        var lo = start + 1;
+        var hi = end;
+        var best = start;
+        while (lo <= hi)
+        {
+            var mid = (lo + hi) >> 1;
+            if (ImGui.CalcTextSize(text.AsSpan(start, mid - start), false, 0f).X <= wrapWidth)
+            {
+                best = mid;
+                lo = mid + 1;
+            }
+            else
+            {
+                hi = mid - 1;
+            }
+        }
+
+        if (best >= end || best <= start)
+            return best;
+
+        var space = text.LastIndexOf(' ', best - 1, best - start);
+        return space >= start ? space + 1 : best;
+    }
+
     private void DrawScratchpad()
     {
         ImGui.TextUnformatted("Scratchpad");
@@ -2975,7 +3069,15 @@ internal sealed class MainWindow : Window, IDisposable
         this.scratchChannel = channel;
 
         ImGui.Spacing();
-        ImGui.InputTextMultiline("##scratch", ref this.scratchDraft, 8000, new Vector2(-1, 140));
+        var wrapWidth = ScratchWrapWidth();
+        ImGui.InputTextMultiline(
+            "##scratch",
+            ref this.scratchDraft,
+            16000,
+            new Vector2(-1, 140),
+            ImGuiInputTextFlags.CallbackAlways | ImGuiInputTextFlags.NoHorizontalScroll,
+            WrapScratchBox,
+            ref wrapWidth);
 
         var pieces = ScratchPad.Split(this.scratchDraft, ScratchChannels[channel].Header);
         var key = channel + "\n" + this.scratchDraft;
