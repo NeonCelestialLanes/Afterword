@@ -50,6 +50,12 @@ internal sealed class RecordingSettings
     /// <summary>When on, the side panel is hidden so the window can be smaller.</summary>
     public bool SidebarHidden { get; set; }
 
+    /// <summary>When on, Afterword is the small scratchpad or scene window.</summary>
+    public bool Mini { get; set; }
+
+    /// <summary>When mini is on, true shows the scratchpad and false shows the recording scene.</summary>
+    public bool MiniScratch { get; set; } = true;
+
     [JsonIgnore]
     public string FilePath { get; set; } = string.Empty;
 

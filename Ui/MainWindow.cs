@@ -98,6 +98,7 @@ internal sealed class MainWindow : Window, IDisposable
     private int scratchNext;
     private string scratchNotice = string.Empty;
     private string scratchKey = string.Empty;
+    private int scratchGeneration;
     private string spellSeen = string.Empty;
     private string spellChecked = string.Empty;
     private double spellDirtyAt;
@@ -105,9 +106,12 @@ internal sealed class MainWindow : Window, IDisposable
     private const float SidebarOpenWidth = 188f;
     private const float SidebarHiddenWidth = 46f;
     private Vector2 frameWindowSize;
+    private Vector2 fullWindowSize = new(980, 660);
     private Vector2? pendingWindowSize;
     private bool? pendingSidebarHidden;
     private bool restoreSizeCondition;
+    private bool mini;
+    private bool miniScratch = true;
     private static readonly (string Label, string Header)[] ScratchChannels =
     [
         ("No command", ""),
@@ -155,13 +159,11 @@ internal sealed class MainWindow : Window, IDisposable
         this.logo = LoadLogo(pluginInterface, textures);
         this.pageFont = CreatePageFont(pluginInterface);
         this.navFont = CreateNavFont(pluginInterface);
-        this.Size = new Vector2(980, 660);
+        this.mini = recorder.Settings.Mini;
+        this.miniScratch = recorder.Settings.MiniScratch;
+        this.Size = this.mini ? new Vector2(440, 340) : new Vector2(980, 660);
         this.SizeCondition = ImGuiCond.FirstUseEver;
-        this.SizeConstraints = new WindowSizeConstraints
-        {
-            MinimumSize = new Vector2(520, 380),
-            MaximumSize = new Vector2(1680, 1200),
-        };
+        this.SizeConstraints = this.mini ? MiniConstraints() : FullConstraints();
         this.AllowPinning = true;
         this.AllowBackgroundBlur = false;
     }
@@ -200,6 +202,8 @@ internal sealed class MainWindow : Window, IDisposable
             this.SizeCondition = ImGuiCond.FirstUseEver;
             this.restoreSizeCondition = false;
         }
+
+        this.SizeConstraints = this.mini ? MiniConstraints() : FullConstraints();
 
         JournalTheme.Dark = this.recorder.Settings.DarkMode;
         this.PushColor(ImGuiCol.WindowBg, JournalTheme.Cover);
@@ -263,6 +267,12 @@ internal sealed class MainWindow : Window, IDisposable
         this.frameWindowSize = ImGui.GetWindowSize();
         this.ApplyPendingSummary();
         var snapshot = this.recorder.Snapshot();
+        if (this.mini)
+        {
+            this.DrawMini(snapshot);
+            return;
+        }
+
         DrawCoverWash();
         this.DrawSidebar();
         ImGui.SameLine(0, 12);
@@ -457,6 +467,11 @@ internal sealed class MainWindow : Window, IDisposable
             this.NavItem("Stories", Page.Stories);
             this.NavItem("Scratchpad", Page.Scratchpad);
             this.NavItem("Settings", Page.Settings);
+            var hideY = ImGui.GetWindowHeight() - 36f - 6f;
+            var miniY = hideY - 38f;
+            if (ImGui.GetCursorPosY() < miniY)
+                ImGui.SetCursorPosY(miniY);
+            this.DrawMiniEntry();
             this.DrawSidebarToggle(false);
             if (navFontOn)
                 this.navFont!.Pop();
@@ -513,6 +528,180 @@ internal sealed class MainWindow : Window, IDisposable
         if (pressed)
             this.ToggleSidebar();
     }
+
+    private void DrawMiniEntry()
+    {
+        const float height = 36f;
+        var width = Math.Max(32f, ImGui.GetContentRegionAvail().X);
+        var pressed = ImGui.InvisibleButton("mini-mode", new Vector2(width, height));
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var draw = ImGui.GetWindowDrawList();
+        if (ImGui.IsItemHovered())
+        {
+            draw.AddRectFilled(
+                min + new Vector2(1f, 1f),
+                max - new Vector2(1f, 1f),
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.10f)),
+                4f);
+            ImGui.SetTooltip("A small scratchpad or scene window");
+        }
+
+        var label = "Mini";
+        var textSize = ImGui.CalcTextSize(label);
+        draw.AddText(
+            new Vector2(min.X + 8f, min.Y + ((height - textSize.Y) * 0.5f)),
+            ImGui.GetColorU32(JournalTheme.CoverInk),
+            label);
+
+        if (pressed)
+            this.EnterMini();
+    }
+
+    private void EnterMini()
+    {
+        if (this.frameWindowSize.X >= 520f && this.frameWindowSize.Y >= 380f)
+            this.fullWindowSize = this.frameWindowSize;
+
+        this.mini = true;
+        var settings = this.recorder.Settings;
+        settings.Mini = true;
+        settings.Save();
+        this.pendingWindowSize = new Vector2(440, 340);
+    }
+
+    private void LeaveMini()
+    {
+        this.mini = false;
+        var settings = this.recorder.Settings;
+        settings.Mini = false;
+        settings.Save();
+        var size = this.fullWindowSize;
+        if (size.X < 700f || size.Y < 480f)
+            size = new Vector2(980, 660);
+
+        this.pendingWindowSize = size;
+    }
+
+    private void SetMiniKind(bool scratch)
+    {
+        this.miniScratch = scratch;
+        var settings = this.recorder.Settings;
+        settings.MiniScratch = scratch;
+        settings.Save();
+    }
+
+    private void DrawMini(NotebookSnapshot snapshot)
+    {
+        DrawCoverWash();
+        ImGui.TextUnformatted(this.miniScratch ? "Scratchpad" : "Scene");
+        ImGui.SameLine();
+        if (CoverButton(this.miniScratch ? "Scene##mini" : "Scratchpad##mini", new Vector2(120, 28)))
+            this.SetMiniKind(!this.miniScratch);
+
+        ImGui.SameLine();
+        if (CoverButton("Full##mini", new Vector2(72, 28)))
+            this.LeaveMini();
+
+        ImGui.Spacing();
+        var available = ImGui.GetContentRegionAvail();
+        var pageSize = new Vector2(Math.Max(40f, available.X), Math.Max(40f, available.Y));
+        ImGui.PushStyleColor(ImGuiCol.ChildBg, JournalTheme.Paper);
+        var open = ImGui.BeginChild("mini-page", pageSize, false);
+        ImGui.PopStyleColor();
+        if (open)
+        {
+            ImGui.SetCursorPosY(ImGui.GetCursorPosY() + 8f);
+            ImGui.Indent(10f);
+            var pageFontOn = this.TryPushPageFont();
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Ink);
+            if (this.miniScratch)
+                this.DrawScratchpad(compact: true);
+            else
+                this.DrawMiniScene(snapshot);
+
+            ImGui.PopStyleColor();
+            if (pageFontOn)
+                this.pageFont!.Pop();
+            ImGui.Unindent(10f);
+        }
+
+        ImGui.EndChild();
+    }
+
+    private void DrawMiniScene(NotebookSnapshot snapshot)
+    {
+        var scene = snapshot.ActiveScene;
+        if (scene == null)
+        {
+            ImGui.TextUnformatted("New scene");
+            ImGui.SetNextItemWidth(-20f);
+            ImGui.InputTextWithHint("##mini-title", "Title", ref this.titleDraft, 120);
+            var canStart = snapshot.IsLoggedIn && snapshot.IsOwnNotebook;
+            if (!canStart)
+                ImGui.BeginDisabled();
+
+            if (CoverButton("Start recording", new Vector2(-20f, 30)) && canStart)
+            {
+                if (this.recorder.Start(this.titleDraft, string.Empty, true, Array.Empty<string>()))
+                    this.titleDraft = string.Empty;
+            }
+
+            if (!canStart)
+            {
+                ImGui.EndDisabled();
+                ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+                ImGui.TextWrapped("Log into this character to record.");
+                ImGui.PopStyleColor();
+            }
+
+            return;
+        }
+
+        ImGui.TextUnformatted(scene.Status == SceneStatus.Recording ? "Recording" : "Paused");
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextUnformatted(scene.Title);
+        ImGui.PopStyleColor();
+
+        var loggedIn = snapshot.IsLoggedIn && snapshot.IsOwnNotebook;
+        if (scene.Status == SceneStatus.Recording)
+        {
+            if (CoverButton("Pause##mini", new Vector2(88, 28)))
+                this.recorder.Pause();
+        }
+        else if (loggedIn)
+        {
+            if (CoverButton("Resume##mini", new Vector2(88, 28)))
+                this.recorder.Resume();
+        }
+        else
+        {
+            ImGui.BeginDisabled();
+            CoverButton("Resume##mini", new Vector2(88, 28));
+            ImGui.EndDisabled();
+        }
+
+        ImGui.SameLine();
+        if (CoverButton("Stop##mini", new Vector2(72, 28)))
+            this.recorder.Stop();
+
+        ImGui.Spacing();
+        var linesHeight = Math.Max(80f, ImGui.GetContentRegionAvail().Y - 8f);
+        this.DrawTranscript(scene, linesHeight);
+    }
+
+    private static WindowSizeConstraints MiniConstraints() => new()
+    {
+        MinimumSize = new Vector2(300, 220),
+        MaximumSize = new Vector2(680, 480),
+    };
+
+    private static WindowSizeConstraints FullConstraints() => new()
+    {
+        MinimumSize = new Vector2(520, 380),
+        MaximumSize = new Vector2(1680, 1200),
+    };
 
     private void ToggleSidebar()
     {
@@ -3314,13 +3503,31 @@ internal sealed class MainWindow : Window, IDisposable
         this.spellDirtyAt = ImGui.GetTime();
     }
 
-    private void DrawScratchpad()
+    private void ClearScratchpad()
     {
-        ImGui.TextUnformatted("Scratchpad");
-        ImGui.Spacing();
-        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextWrapped("Write the post. Afterword fills each chat line, breaks on a sentence when it can, and numbers the pieces 1/2, 2/2.");
-        ImGui.PopStyleColor();
+        this.scratchDraft = string.Empty;
+        this.scratchNext = 0;
+        this.scratchNotice = string.Empty;
+        this.scratchKey = string.Empty;
+        this.scratchGeneration++;
+        this.spellHits = [];
+        this.spellSeen = string.Empty;
+        this.spellChecked = string.Empty;
+        this.spellDirtyAt = 0;
+    }
+
+    private void DrawScratchpad(bool compact = false)
+    {
+        if (!compact)
+            ImGui.TextUnformatted("Scratchpad");
+        if (!compact)
+        {
+            ImGui.Spacing();
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped("Write the post. Afterword fills each chat line, breaks on a sentence when it can, and numbers the pieces 1/2, 2/2.");
+            ImGui.PopStyleColor();
+        }
+
         ImGui.Spacing();
 
         var channel = this.scratchChannel;
@@ -3328,7 +3535,7 @@ internal sealed class MainWindow : Window, IDisposable
             channel = 2;
 
         ImGui.TextUnformatted("Channel");
-        ImGui.SetNextItemWidth(220);
+        ImGui.SetNextItemWidth(compact ? 160 : 220);
         PushPaperPopup();
         if (ImGui.BeginCombo("##scratch-channel", ScratchChannels[channel].Label))
         {
@@ -3345,12 +3552,13 @@ internal sealed class MainWindow : Window, IDisposable
         this.scratchChannel = channel;
 
         ImGui.Spacing();
+        var boxHeight = compact ? Math.Max(96f, ImGui.GetContentRegionAvail().Y - 88f) : 140f;
         var wrapWidth = ScratchWrapWidth();
         ImGui.InputTextMultiline(
-            "##scratch",
+            "##scratch" + this.scratchGeneration,
             ref this.scratchDraft,
             16000,
-            new Vector2(-1, 140),
+            new Vector2(compact ? -20f : -1f, boxHeight),
             ImGuiInputTextFlags.CallbackAlways | ImGuiInputTextFlags.NoHorizontalScroll,
             WrapScratchBox,
             ref wrapWidth);
@@ -3366,24 +3574,35 @@ internal sealed class MainWindow : Window, IDisposable
             this.scratchNotice = string.Empty;
         }
 
-        if (pieces.Count == 0)
+        if (pieces.Count == 0 && string.IsNullOrWhiteSpace(this.scratchDraft))
             return;
 
         ImGui.Spacing();
-        var next = this.scratchNext;
-        if (next < 0 || next >= pieces.Count)
-            next = 0;
-
-        var label = pieces.Count == 1 ? "Copy" : $"Copy {next + 1}/{pieces.Count}";
-        if (CoverButton(label, new Vector2(160, 32)))
+        if (pieces.Count > 0)
         {
-            ImGui.SetClipboardText(pieces[next].CopyText);
-            var last = next >= pieces.Count - 1;
-            this.scratchNotice = last
-                ? $"Copied {next + 1}/{pieces.Count}. That was the last piece."
-                : $"Copied {next + 1}/{pieces.Count}. Paste it into chat, then come back for the next piece.";
-            this.scratchNext = last ? 0 : next + 1;
+            var next = this.scratchNext;
+            if (next < 0 || next >= pieces.Count)
+                next = 0;
+
+            var label = pieces.Count == 1 ? "Copy" : $"Copy {next + 1}/{pieces.Count}";
+            if (CoverButton(label, new Vector2(160, 32)))
+            {
+                ImGui.SetClipboardText(pieces[next].CopyText);
+                var last = next >= pieces.Count - 1;
+                this.scratchNotice = last
+                    ? $"Copied {next + 1}/{pieces.Count}. That was the last piece."
+                    : $"Copied {next + 1}/{pieces.Count}. Paste it into chat, then come back for the next piece.";
+                this.scratchNext = last ? 0 : next + 1;
+            }
+
+            ImGui.SameLine();
         }
+
+        if (CoverButton("Clear##scratch", new Vector2(100, 32)))
+            this.ClearScratchpad();
+
+        if (pieces.Count == 0)
+            return;
 
         if (!string.IsNullOrWhiteSpace(this.scratchNotice))
         {
