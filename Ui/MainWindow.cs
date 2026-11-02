@@ -1600,15 +1600,6 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.TextUnformatted(ended == null ? $"{when}  ·  {scene.Location}" : $"{when} – {ended}  ·  {scene.Location}");
         ImGui.PopStyleColor();
         this.DrawStorylineField(scene);
-        this.DrawSummary(
-            "scene:" + scene.Id,
-            ref this.sceneSummaryId,
-            ref this.sceneSummaryDraft,
-            () => scene.Summary,
-            text => this.recorder.SetSceneSummary(scene.Id, text),
-            () => SceneTranscript(scene),
-            "this scene");
-        ImGui.Spacing();
         if (this.sceneNotesId != scene.Id)
         {
             this.sceneNotesId = scene.Id;
@@ -1619,11 +1610,14 @@ internal sealed class MainWindow : Window, IDisposable
             this.pendingLineDelete = null;
         }
 
-        ImGui.TextUnformatted("Notes");
-        if (ImGui.InputTextMultiline("##scene-notes", ref this.sceneNotesDraft, 4000, new Vector2(-1, 90)))
-            this.recorder.SetSceneNotes(scene.Id, this.sceneNotesDraft);
-
         ImGui.Spacing();
+        ImGui.TextUnformatted("Log");
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        var lineCount = scene.Lines?.Count ?? 0;
+        ImGui.TextUnformatted(lineCount == 1 ? "1 line" : lineCount + " lines");
+        ImGui.PopStyleColor();
+        ImGui.SameLine();
         if (CoverButton(this.editingLog ? "Done##log" : "Edit log", new Vector2(120, 30)))
         {
             this.editingLog = !this.editingLog;
@@ -1639,6 +1633,23 @@ internal sealed class MainWindow : Window, IDisposable
             return;
         }
 
+        var logHeight = Math.Max(280f, ImGui.GetContentRegionAvail().Y - 36f);
+        this.DrawTranscript(scene, logHeight, plain: true);
+
+        ImGui.Spacing();
+        this.DrawSummary(
+            "scene:" + scene.Id,
+            ref this.sceneSummaryId,
+            ref this.sceneSummaryDraft,
+            () => scene.Summary,
+            text => this.recorder.SetSceneSummary(scene.Id, text),
+            () => SceneTranscript(scene),
+            "this scene");
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Notes");
+        if (ImGui.InputTextMultiline("##scene-notes", ref this.sceneNotesDraft, 4000, new Vector2(-1, 90)))
+            this.recorder.SetSceneNotes(scene.Id, this.sceneNotesDraft);
+
         ImGui.Spacing();
         if (this.ConfirmDelete(scene.Id))
         {
@@ -1650,8 +1661,6 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         if (scene.Status == SceneStatus.Saved)
             this.DrawSplit(scene);
-
-        this.DrawTranscript(scene);
     }
 
     private void DrawEditLog(SceneRecord scene)
@@ -1771,7 +1780,7 @@ internal sealed class MainWindow : Window, IDisposable
             this.SplitAtTime(scene);
 
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextWrapped("Lines from that time on become their own scene. This one keeps the earlier lines. You can also edit a line below.");
+        ImGui.TextWrapped("Lines from that time on become their own scene. This one keeps the earlier lines.");
         ImGui.PopStyleColor();
         this.DrawCombineLogs(scene);
         if (!string.IsNullOrWhiteSpace(this.lineMessage))
@@ -1939,7 +1948,7 @@ internal sealed class MainWindow : Window, IDisposable
         return true;
     }
 
-    private void DrawTranscript(SceneRecord scene, float height = 0f, string? keyword = null)
+    private void DrawTranscript(SceneRecord scene, float height = 0f, string? keyword = null, bool plain = false)
     {
         var live = height > 0f;
         var filter = keyword?.Trim() ?? string.Empty;
@@ -1970,7 +1979,7 @@ internal sealed class MainWindow : Window, IDisposable
                     continue;
 
                 any = true;
-                this.DrawLine(scene, line);
+                this.DrawLine(scene, line, plain);
             }
 
             if (!any)
@@ -1998,9 +2007,9 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.PopStyleColor();
     }
 
-    private void DrawLine(SceneRecord scene, SceneLine line)
+    private void DrawLine(SceneRecord scene, SceneLine line, bool plain = false)
     {
-        var editable = scene.Status == SceneStatus.Saved;
+        var editable = !plain && scene.Status == SceneStatus.Saved;
         var tag = line.Kind == LineKind.Emote
             ? "emote"
             : string.IsNullOrWhiteSpace(line.Channel) ? "say" : line.Channel.ToLowerInvariant();

@@ -65,9 +65,9 @@ A tell prefix `>>` on a name is ignored, so `>> Lucien Vaelmont` is the same per
 
 Open a scene from **My Notebook**.
 
-- Edit a speaker or a line. **Delete line** asks you to press it again.
-- **Edit log**, under the scene notes, shows the log. Check the lines you don't want, then press **Delete lines**. It asks once. The rest of the log stays.
-- **New scene starts at** takes a clock time, such as `10:45 AM`. Lines from that time on become a new scene. The scene you are in keeps the earlier lines. **New scene** on a line does the same from that line.
+- The log is on the scene, so you can read it. Time, name, and what they said.
+- **Edit log** shows the same lines with a box on each one. Check the lines you don't want, then press **Delete lines**. It asks once. The rest of the log stays.
+- **New scene starts at** takes a clock time, such as `10:45 AM`. Lines from that time on become a new scene. The scene you are in keeps the earlier lines.
 - **Combine with another log** moves that log's lines into the one you have open, in the order they were said. This log keeps its name. The other log is removed. It asks you to press **Combine?** before it does that.
 - Attach the scene to a storyline.
 - Ask for a summary, or type one yourself.
