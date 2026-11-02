@@ -53,6 +53,8 @@ internal sealed class MainWindow : Window, IDisposable
     private string sceneNotesDraft = string.Empty;
     private Guid sceneNotesId;
     private bool editingLog;
+    private bool logDeleteArmed;
+    private readonly HashSet<int> logChecks = [];
     private Guid sceneSummaryId;
     private string storylineSummaryDraft = string.Empty;
     private string characterSummaryDraft = string.Empty;
@@ -1612,6 +1614,8 @@ internal sealed class MainWindow : Window, IDisposable
             this.sceneNotesId = scene.Id;
             this.sceneNotesDraft = scene.Notes ?? string.Empty;
             this.editingLog = false;
+            this.logDeleteArmed = false;
+            this.logChecks.Clear();
             this.pendingLineDelete = null;
         }
 
@@ -1623,15 +1627,16 @@ internal sealed class MainWindow : Window, IDisposable
         if (CoverButton(this.editingLog ? "Done##log" : "Edit log", new Vector2(120, 30)))
         {
             this.editingLog = !this.editingLog;
+            this.logDeleteArmed = false;
+            this.logChecks.Clear();
             this.pendingLineDelete = null;
             this.editingLineId = null;
         }
 
         if (this.editingLog)
         {
-            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-            ImGui.TextWrapped("Remove any line you don't want. The rest of the log stays.");
-            ImGui.PopStyleColor();
+            this.DrawEditLog(scene);
+            return;
         }
 
         ImGui.Spacing();
@@ -1647,6 +1652,102 @@ internal sealed class MainWindow : Window, IDisposable
             this.DrawSplit(scene);
 
         this.DrawTranscript(scene);
+    }
+
+    private void DrawEditLog(SceneRecord scene)
+    {
+        ImGui.Spacing();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Check the lines you don't want. Delete lines removes those. The rest of the log stays.");
+        ImGui.PopStyleColor();
+
+        var checkedCount = 0;
+        for (var i = 0; i < scene.Lines.Count; i++)
+        {
+            if (this.logChecks.Contains(i))
+                checkedCount++;
+        }
+
+        var canDelete = checkedCount > 0;
+        if (!canDelete)
+            ImGui.BeginDisabled();
+
+        var label = this.logDeleteArmed ? "Delete lines?##log" : "Delete lines##log";
+        if (CoverButton(label, new Vector2(this.logDeleteArmed ? 150 : 130, 30)) && canDelete)
+        {
+            if (!this.logDeleteArmed)
+            {
+                this.logDeleteArmed = true;
+            }
+            else
+            {
+                this.recorder.RemoveLineIndexes(scene.Id, this.logChecks);
+                this.logChecks.Clear();
+                this.logDeleteArmed = false;
+            }
+        }
+
+        if (!canDelete)
+            ImGui.EndDisabled();
+
+        if (this.logDeleteArmed)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped("Press Delete lines? to confirm. The lines you checked are removed.");
+            ImGui.PopStyleColor();
+        }
+
+        ImGui.Spacing();
+        if (scene.Lines.Count == 0)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextUnformatted("This scene has no lines yet.");
+            ImGui.PopStyleColor();
+            return;
+        }
+
+        for (var i = 0; i < scene.Lines.Count; i++)
+            this.DrawLogChoice(scene.Lines[i], i);
+    }
+
+    private void DrawLogChoice(SceneLine line, int index)
+    {
+        var speaker = PlayerNames.Clean(line.Speaker);
+        if (string.IsNullOrWhiteSpace(speaker))
+            speaker = "Unknown";
+
+        var tag = line.Kind == LineKind.Emote
+            ? "emote"
+            : string.IsNullOrWhiteSpace(line.Channel) ? "say" : line.Channel.ToLowerInvariant();
+        var on = this.logChecks.Contains(index);
+        ImGui.PushID(index);
+        if (ImGui.Checkbox("##keep-out", ref on))
+        {
+            if (on)
+                this.logChecks.Add(index);
+            else
+                this.logChecks.Remove(index);
+
+            this.logDeleteArmed = false;
+        }
+
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextUnformatted($"{line.At.ToLocalTime():h:mm tt}   [{tag}]");
+        ImGui.PopStyleColor();
+        ImGui.SameLine();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Name);
+        ImGui.TextUnformatted(speaker);
+        ImGui.PopStyleColor();
+        ImGui.Indent(28f);
+        ImGui.PushStyleColor(ImGuiCol.Text, line.Kind == LineKind.Emote ? JournalTheme.Emote : JournalTheme.Ink);
+        ImGui.PushTextWrapPos(ImGui.GetCursorPosX() + ImGui.GetContentRegionAvail().X);
+        ImGui.TextUnformatted(PlayerNames.StripLeadingMark(line.Text));
+        ImGui.PopTextWrapPos();
+        ImGui.PopStyleColor();
+        ImGui.Unindent(28f);
+        ImGui.PopID();
+        ImGui.Dummy(new Vector2(1, 6));
     }
 
     private void DrawSplit(SceneRecord scene)
@@ -1937,24 +2038,6 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Name);
         ImGui.TextUnformatted(speaker);
         ImGui.PopStyleColor();
-        if (this.editingLog && scene.Status == SceneStatus.Saved)
-        {
-            ImGui.SameLine(0, 8);
-            var removing = this.pendingLineDelete == line.Id;
-            if (CoverButton(removing ? "Remove?" : "Remove", new Vector2(removing ? 96 : 88, 24)))
-            {
-                if (!removing)
-                {
-                    this.pendingLineDelete = line.Id;
-                }
-                else
-                {
-                    this.recorder.RemoveLine(scene.Id, line.Id);
-                    this.editingLineId = null;
-                    this.pendingLineDelete = null;
-                }
-            }
-        }
 
         if (editable && this.editingLineId == line.Id)
         {
@@ -3485,6 +3568,23 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
+        ImGui.TextUnformatted("Summary");
+        this.DrawWrappedSummary(
+            "##character-summary",
+            ref this.characterSummaryDraft,
+            text => this.recorder.SetCharacterSummary(this.openCharacter, text));
+
+        this.DrawSummarizeControls(
+            "character:" + this.openCharacter,
+            () => CharacterTranscript(snapshot, this.openCharacter),
+            "this character's lines");
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Notes");
+        if (ImGui.InputTextMultiline("##character-notes", ref this.characterNotesDraft, 4000, new Vector2(-1, 160)))
+            this.recorder.SetCharacterNotes(this.openCharacter, this.characterNotesDraft);
+
+        ImGui.Spacing();
         ImGui.TextUnformatted("Same person as");
         var others = new List<string>();
         foreach (var name in CollectCharacters(snapshot))
@@ -3529,23 +3629,6 @@ internal sealed class MainWindow : Window, IDisposable
                 this.characterEditName = string.Empty;
             }
         }
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Summary");
-        this.DrawWrappedSummary(
-            "##character-summary",
-            ref this.characterSummaryDraft,
-            text => this.recorder.SetCharacterSummary(this.openCharacter, text));
-
-        this.DrawSummarizeControls(
-            "character:" + this.openCharacter,
-            () => CharacterTranscript(snapshot, this.openCharacter),
-            "this character's lines");
-
-        ImGui.Spacing();
-        ImGui.TextUnformatted("Notes");
-        if (ImGui.InputTextMultiline("##character-notes", ref this.characterNotesDraft, 4000, new Vector2(-1, 160)))
-            this.recorder.SetCharacterNotes(this.openCharacter, this.characterNotesDraft);
 
         ImGui.Spacing();
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);

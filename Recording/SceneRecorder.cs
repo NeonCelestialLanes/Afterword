@@ -189,6 +189,8 @@ internal sealed class SceneRecorder
 
     public void RemoveLine(Guid sceneId, Guid lineId) => this.store.RemoveLine(sceneId, lineId);
 
+    public void RemoveLineIndexes(Guid sceneId, IReadOnlyCollection<int> indexes) => this.store.RemoveLineIndexes(sceneId, indexes);
+
     public bool SplitScene(Guid sceneId, int firstLine, out Guid newSceneId) => this.store.SplitScene(sceneId, firstLine, out newSceneId);
 
     public bool CombineScenes(Guid keepId, Guid otherId) => this.store.CombineScenes(keepId, otherId);

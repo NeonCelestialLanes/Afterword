@@ -497,6 +497,33 @@ internal sealed class NotebookStore
         }
     }
 
+    public void RemoveLineIndexes(Guid sceneId, IReadOnlyCollection<int> indexes)
+    {
+        lock (this.gate)
+        {
+            var scene = this.FindUnlocked(sceneId);
+            if (scene?.Lines == null || indexes.Count == 0)
+                return;
+
+            var ordered = new List<int>();
+            foreach (var index in indexes)
+            {
+                if (index >= 0 && index < scene.Lines.Count && !ordered.Contains(index))
+                    ordered.Add(index);
+            }
+
+            if (ordered.Count == 0)
+                return;
+
+            ordered.Sort((left, right) => right.CompareTo(left));
+            foreach (var index in ordered)
+                scene.Lines.RemoveAt(index);
+
+            this.Restamp(scene);
+            this.SaveUnlocked();
+        }
+    }
+
     public bool SplitScene(Guid sceneId, int firstLine, out Guid newSceneId)
     {
         newSceneId = Guid.Empty;
