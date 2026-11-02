@@ -71,6 +71,7 @@ internal sealed class MainWindow : Window, IDisposable
     private string writtenBodyDraft = string.Empty;
     private Guid writtenEditId;
     private bool writtenDeleteArmed;
+    private bool storylineDeleteArmed;
     private string newCharacter = string.Empty;
     private string characterNotesDraft = string.Empty;
     private string characterEditName = string.Empty;
@@ -629,6 +630,29 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.EndChild();
     }
 
+    private string DraftCastLine()
+    {
+        if (this.draftEveryone)
+            return "Everyone, the same as the full window.";
+
+        if (this.draftCast.Count == 0)
+            return "Nobody is selected in the full window, so this scene stays quiet.";
+
+        return "Only " + string.Join(", ", this.draftCast) + ", the same as the full window.";
+    }
+
+    private static string WhoIsRecorded(SceneRecord scene)
+    {
+        if (scene.Mode == RecordingMode.Everyone)
+            return "Everyone, the same as the full window.";
+
+        scene.SelectedSpeakers ??= new List<string>();
+        if (scene.SelectedSpeakers.Count == 0)
+            return "Nobody is selected in the full window, so this scene stays quiet.";
+
+        return "Only " + string.Join(", ", scene.SelectedSpeakers) + ", the same as the full window.";
+    }
+
     private void DrawMiniScene(NotebookSnapshot snapshot)
     {
         var scene = snapshot.ActiveScene;
@@ -637,14 +661,22 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.TextUnformatted("New scene");
             ImGui.SetNextItemWidth(-20f);
             ImGui.InputTextWithHint("##mini-title", "Title", ref this.titleDraft, 120);
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped(this.DraftCastLine());
+            ImGui.PopStyleColor();
             var canStart = snapshot.IsLoggedIn && snapshot.IsOwnNotebook;
             if (!canStart)
                 ImGui.BeginDisabled();
 
             if (CoverButton("Start recording", new Vector2(-20f, 30)) && canStart)
             {
-                if (this.recorder.Start(this.titleDraft, string.Empty, true, Array.Empty<string>()))
+                if (this.recorder.Start(this.titleDraft, this.placeDraft, this.draftEveryone, this.draftCast))
+                {
                     this.titleDraft = string.Empty;
+                    this.placeDraft = string.Empty;
+                    this.draftCast.Clear();
+                    this.draftEveryone = true;
+                }
             }
 
             if (!canStart)
@@ -662,6 +694,9 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.SameLine();
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
         ImGui.TextUnformatted(scene.Title);
+        ImGui.PopStyleColor();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped(WhoIsRecorded(scene));
         ImGui.PopStyleColor();
 
         var loggedIn = snapshot.IsLoggedIn && snapshot.IsOwnNotebook;
@@ -2384,12 +2419,14 @@ internal sealed class MainWindow : Window, IDisposable
                 ? string.Empty
                 : story.CreatedAt.ToLocalTime().ToString("MMM d, yyyy");
             this.storylineDateMessage = string.Empty;
+            this.storylineDeleteArmed = false;
         }
 
         if (CoverButton("Back to storylines", new Vector2(180, 30)))
         {
             this.openStorylineId = null;
             this.openStorylineNoteId = null;
+            this.storylineDeleteArmed = false;
             return;
         }
 
@@ -2562,11 +2599,27 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.Spacing();
-        if (CoverButton("Delete storyline", new Vector2(160, 30)))
+        var deleteLabel = this.storylineDeleteArmed ? "Delete storyline?" : "Delete storyline";
+        if (CoverButton(deleteLabel, new Vector2(this.storylineDeleteArmed ? 190 : 160, 30)))
         {
-            this.recorder.RemoveStoryline(story.Id);
-            this.openStorylineId = null;
-            this.openStorylineNoteId = null;
+            if (!this.storylineDeleteArmed)
+            {
+                this.storylineDeleteArmed = true;
+            }
+            else
+            {
+                this.recorder.RemoveStoryline(story.Id);
+                this.openStorylineId = null;
+                this.openStorylineNoteId = null;
+                this.storylineDeleteArmed = false;
+            }
+        }
+
+        if (this.storylineDeleteArmed)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped("This removes the group. The scenes stay in the notebook. Press Delete storyline? to confirm.");
+            ImGui.PopStyleColor();
         }
     }
 
