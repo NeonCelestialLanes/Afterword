@@ -61,6 +61,8 @@ internal sealed class MainWindow : Window, IDisposable
     private bool scenesNewestFirst = true;
     private string newStoryline = string.Empty;
     private string storylineTitleDraft = string.Empty;
+    private string storylineDateDraft = string.Empty;
+    private string storylineDateMessage = string.Empty;
     private string storylineNotesDraft = string.Empty;
     private Guid storylineEditId;
     private Guid? openStorylineId;
@@ -102,6 +104,10 @@ internal sealed class MainWindow : Window, IDisposable
     private List<SpellHit> spellHits = [];
     private const float SidebarOpenWidth = 188f;
     private const float SidebarHiddenWidth = 46f;
+    private Vector2 frameWindowSize;
+    private Vector2? pendingWindowSize;
+    private bool? pendingSidebarHidden;
+    private bool restoreSizeCondition;
     private static readonly (string Label, string Header)[] ScratchChannels =
     [
         ("No command", ""),
@@ -174,6 +180,27 @@ internal sealed class MainWindow : Window, IDisposable
 
     public override void PreDraw()
     {
+        if (this.pendingWindowSize is Vector2 next)
+        {
+            this.Size = next;
+            this.SizeCondition = ImGuiCond.Always;
+            if (this.pendingSidebarHidden is bool hidden)
+            {
+                var settings = this.recorder.Settings;
+                settings.SidebarHidden = hidden;
+                settings.Save();
+                this.pendingSidebarHidden = null;
+            }
+
+            this.pendingWindowSize = null;
+            this.restoreSizeCondition = true;
+        }
+        else if (this.restoreSizeCondition)
+        {
+            this.SizeCondition = ImGuiCond.FirstUseEver;
+            this.restoreSizeCondition = false;
+        }
+
         JournalTheme.Dark = this.recorder.Settings.DarkMode;
         this.PushColor(ImGuiCol.WindowBg, JournalTheme.Cover);
         this.PushColor(ImGuiCol.ChildBg, JournalTheme.Paper);
@@ -233,6 +260,7 @@ internal sealed class MainWindow : Window, IDisposable
 
     public override void Draw()
     {
+        this.frameWindowSize = ImGui.GetWindowSize();
         this.ApplyPendingSummary();
         var snapshot = this.recorder.Snapshot();
         DrawCoverWash();
@@ -488,14 +516,14 @@ internal sealed class MainWindow : Window, IDisposable
 
     private void ToggleSidebar()
     {
-        var settings = this.recorder.Settings;
-        settings.SidebarHidden = !settings.SidebarHidden;
-        settings.Save();
+        var hidden = this.pendingSidebarHidden ?? this.recorder.Settings.SidebarHidden;
+        hidden = !hidden;
+        var size = this.pendingWindowSize ?? this.frameWindowSize;
         var delta = SidebarOpenWidth - SidebarHiddenWidth;
-        var size = ImGui.GetWindowSize();
-        var width = settings.SidebarHidden ? size.X - delta : size.X + delta;
+        var width = hidden ? size.X - delta : size.X + delta;
         width = Math.Clamp(width, 520f, 1680f);
-        ImGui.SetWindowSize(new Vector2(width, size.Y));
+        this.pendingSidebarHidden = hidden;
+        this.pendingWindowSize = new Vector2(width, size.Y);
     }
 
     private static void DrawChevron(Vector2 center, bool pointRight)
@@ -601,7 +629,7 @@ internal sealed class MainWindow : Window, IDisposable
 
         ImGui.PopStyleColor(5);
         ImGui.SameLine();
-        if (CoverButton("Add", new Vector2(72, 30)))
+        if (CoverButton("Add##profile", new Vector2(72, 30)))
         {
             this.profileDeleteArmed = false;
             this.addingProfile = true;
@@ -614,7 +642,7 @@ internal sealed class MainWindow : Window, IDisposable
             if (!canDelete)
                 ImGui.BeginDisabled();
 
-            if (CoverButton(this.profileDeleteArmed ? "Delete?" : "Delete", new Vector2(this.profileDeleteArmed ? 96 : 88, 30)) && canDelete)
+            if (CoverButton(this.profileDeleteArmed ? "Delete?##profile" : "Delete##profile", new Vector2(this.profileDeleteArmed ? 96 : 88, 30)) && canDelete)
             {
                 if (!this.profileDeleteArmed)
                 {
@@ -1621,7 +1649,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.SetNextItemWidth(220);
         ImGui.InputText("##add-person", ref this.draftName, 64);
         ImGui.SameLine();
-        if (CoverButton("Add", new Vector2(72, 28)) && !string.IsNullOrWhiteSpace(this.draftName))
+        if (CoverButton("Add##cast", new Vector2(72, 28)) && !string.IsNullOrWhiteSpace(this.draftName))
         {
             if (live)
                 this.recorder.IncludeSpeaker(this.draftName, true);
@@ -2053,7 +2081,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.SetNextItemWidth(280);
         ImGui.InputTextWithHint("##new-storyline", "Storyline name", ref this.newStoryline, 80);
         ImGui.SameLine();
-        if (CoverButton("Add", new Vector2(72, 28)) && this.recorder.AddStoryline(this.newStoryline, out var id))
+        if (CoverButton("Add##storyline", new Vector2(72, 28)) && this.recorder.AddStoryline(this.newStoryline, out var id))
         {
             this.openStorylineId = id;
             this.newStoryline = string.Empty;
@@ -2076,19 +2104,70 @@ internal sealed class MainWindow : Window, IDisposable
             return;
         }
 
-        foreach (var story in snapshot.Storylines)
+        var stories = new List<StorylineRecord>(snapshot.Storylines);
+        stories.Sort(CompareStorylineDate);
+        foreach (var story in stories)
         {
             var scenes = CountScenes(snapshot, story.Title);
             var subtitle = scenes == 1 ? "1 scene" : $"{scenes} scenes";
+            var when = story.CreatedAt == default ? "No date yet" : story.CreatedAt.ToLocalTime().ToString("MMM d, yyyy");
             ImGui.PushID(story.Id.ToString());
             if (CoverButton(story.Title, new Vector2(-1, 32)))
                 this.openStorylineId = story.Id;
             ImGui.PopID();
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-            ImGui.TextUnformatted($"{story.CreatedAt.ToLocalTime():MMM d, yyyy}   ·   {subtitle}");
+            ImGui.TextUnformatted($"{when}   ·   {subtitle}");
             ImGui.PopStyleColor();
             ImGui.Spacing();
         }
+    }
+
+    private static int CompareStorylineDate(StorylineRecord left, StorylineRecord right)
+    {
+        var leftUnset = left.CreatedAt == default;
+        var rightUnset = right.CreatedAt == default;
+        if (leftUnset != rightUnset)
+            return leftUnset ? 1 : -1;
+
+        var order = right.CreatedAt.CompareTo(left.CreatedAt);
+        if (order != 0)
+            return order;
+
+        return string.Compare(left.Title, right.Title, StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool TryParseStoryDate(string text, out DateTimeOffset when)
+    {
+        when = default;
+        var trimmed = text.Trim();
+        if (trimmed.Length == 0 || !ContainsYear(trimmed) || !DateTime.TryParse(trimmed, out var parsed))
+            return false;
+
+        if (parsed.Year < 1900 || parsed.Year > 2200)
+            return false;
+
+        when = new DateTimeOffset(DateTime.SpecifyKind(parsed.Date, DateTimeKind.Local));
+        return true;
+    }
+
+    private static bool ContainsYear(string text)
+    {
+        var digits = 0;
+        foreach (var character in text)
+        {
+            if (char.IsDigit(character))
+            {
+                digits++;
+                if (digits == 4)
+                    return true;
+            }
+            else
+            {
+                digits = 0;
+            }
+        }
+
+        return false;
     }
 
     private void DrawOpenStoryline(NotebookSnapshot snapshot, StorylineRecord story)
@@ -2112,6 +2191,10 @@ internal sealed class MainWindow : Window, IDisposable
             this.storylineTitleDraft = story.Title;
             this.storylineNotesDraft = story.Notes;
             this.storylineSummaryDraft = story.Summary;
+            this.storylineDateDraft = story.CreatedAt == default
+                ? string.Empty
+                : story.CreatedAt.ToLocalTime().ToString("MMM d, yyyy");
+            this.storylineDateMessage = string.Empty;
         }
 
         if (CoverButton("Back to storylines", new Vector2(180, 30)))
@@ -2126,6 +2209,29 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.SetNextItemWidth(-1);
         if (ImGui.InputText("##story-title", ref this.storylineTitleDraft, 80))
             this.recorder.RenameStoryline(story.Id, this.storylineTitleDraft);
+
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Date");
+        ImGui.SetNextItemWidth(220);
+        if (ImGui.InputTextWithHint("##story-date", "Nov 1, 2026", ref this.storylineDateDraft, 40))
+        {
+            if (TryParseStoryDate(this.storylineDateDraft, out var when))
+            {
+                this.storylineDateMessage = string.Empty;
+                this.recorder.SetStorylineDate(story.Id, when);
+            }
+            else if (!string.IsNullOrWhiteSpace(this.storylineDateDraft))
+            {
+                this.storylineDateMessage = "Use a date like Nov 1, 2026.";
+            }
+        }
+
+        if (!string.IsNullOrWhiteSpace(this.storylineDateMessage))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextUnformatted(this.storylineDateMessage);
+            ImGui.PopStyleColor();
+        }
 
         this.DrawSummary(
             "story:" + story.Id,
@@ -2795,7 +2901,8 @@ internal sealed class MainWindow : Window, IDisposable
     {
         ImGui.Spacing();
         ImGui.TextUnformatted("Storyline");
-        var storylines = this.recorder.Snapshot().Storylines;
+        var storylines = new List<StorylineRecord>(this.recorder.Snapshot().Storylines);
+        storylines.Sort(CompareStorylineDate);
         var shown = string.IsNullOrWhiteSpace(scene.Storyline) ? "None yet" : scene.Storyline;
         ImGui.SetNextItemWidth(280);
         ImGui.PushStyleColor(ImGuiCol.PopupBg, JournalTheme.Paper);
@@ -3416,7 +3523,9 @@ internal sealed class MainWindow : Window, IDisposable
             if (ImGui.Selectable("None yet", string.IsNullOrWhiteSpace(story.Storyline)))
                 this.recorder.SetWrittenStoryStoryline(story.Id, string.Empty);
 
-            foreach (var line in snapshot.Storylines)
+            var lines = new List<StorylineRecord>(snapshot.Storylines);
+            lines.Sort(CompareStorylineDate);
+            foreach (var line in lines)
             {
                 ImGui.PushID(line.Id.ToString());
                 var chosen = string.Equals(story.Storyline, line.Title, StringComparison.OrdinalIgnoreCase);

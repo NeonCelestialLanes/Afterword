@@ -203,6 +203,8 @@ internal sealed class SceneRecorder
 
     public void RenameStoryline(Guid id, string title) => this.store.RenameStoryline(id, title);
 
+    public void SetStorylineDate(Guid id, DateTimeOffset when) => this.store.SetStorylineDate(id, when);
+
     public void SetStorylineNotes(Guid id, string notes) => this.store.SetStorylineNotes(id, notes);
 
     public string FillStorylineSummaryIfEmpty(Guid id) => this.store.FillStorylineSummaryIfEmpty(id);

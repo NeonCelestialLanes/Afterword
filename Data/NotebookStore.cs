@@ -667,6 +667,19 @@ internal sealed class NotebookStore
         }
     }
 
+    public void SetStorylineDate(Guid id, DateTimeOffset when)
+    {
+        lock (this.gate)
+        {
+            var story = this.FindStoryline(id);
+            if (story == null || story.CreatedAt == when)
+                return;
+
+            story.CreatedAt = when;
+            this.SaveUnlocked();
+        }
+    }
+
     public void SetStorylineNotes(Guid id, string notes)
     {
         lock (this.gate)
