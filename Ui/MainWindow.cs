@@ -509,7 +509,7 @@ internal sealed class MainWindow : Window, IDisposable
                 max - new Vector2(1f, 1f),
                 ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.10f)),
                 4f);
-            ImGui.SetTooltip(hidden ? "Show the side panel" : "Hide the side panel");
+            ShowTip(hidden ? "Show the side panel" : "Hide the side panel");
         }
 
         var centerY = (min.Y + max.Y) * 0.5f;
@@ -547,7 +547,7 @@ internal sealed class MainWindow : Window, IDisposable
                 max - new Vector2(1f, 1f),
                 ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.10f)),
                 4f);
-            ImGui.SetTooltip("A small scratchpad or scene window");
+            ShowTip("A small scratchpad or scene window");
         }
 
         var label = "Mini";
@@ -887,7 +887,7 @@ internal sealed class MainWindow : Window, IDisposable
             {
                 ImGui.EndDisabled();
                 if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                    ImGui.SetTooltip("Log into another character before deleting this notebook.");
+                    ShowTip("Log into another character before deleting this notebook.");
             }
         }
 
@@ -1284,7 +1284,7 @@ internal sealed class MainWindow : Window, IDisposable
         {
             ImGui.EndDisabled();
             if (ImGui.IsItemHovered(ImGuiHoveredFlags.AllowWhenDisabled))
-                ImGui.SetTooltip(snapshot.IsLoggedIn
+                ShowTip(snapshot.IsLoggedIn
                     ? $"Log into {snapshot.CharacterName} to record a new scene."
                     : "Log into a character first.");
         }
@@ -2210,6 +2210,15 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         return false;
+    }
+
+    private static void ShowTip(string text)
+    {
+        ImGui.PushStyleColor(ImGuiCol.PopupBg, JournalTheme.Cover);
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, JournalTheme.Cover);
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.CoverInk);
+        ImGui.SetTooltip(text);
+        ImGui.PopStyleColor(3);
     }
 
     private static bool CoverButton(string label, Vector2 size)
