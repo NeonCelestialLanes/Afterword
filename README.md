@@ -6,9 +6,9 @@ The journal is named Afterword. The plugin file is `RPChronicles.dll`. Open it w
 
 You need to be logged into a character. Each character has their own notebook.
 
-## Made with help from AI
+## Made by its creator
 
-The ideas are the creator's. AI only wrote the code.
+The creator of Afterword made this journal for roleplay. It is a private notebook for your scenes, kept on your computer. The ideas are the creator's. AI only wrote the code.
 
 It is still your notebook. It is a standalone plugin. It does not connect to other plugins, and it does not collect information.
 
