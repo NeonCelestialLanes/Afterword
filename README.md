@@ -6,6 +6,16 @@ The journal is named Afterword. The plugin file is `RPChronicles.dll`. Open it w
 
 You need to be logged into a character. Each character has their own notebook.
 
+## Built with AI
+
+Afterword was built with AI.
+
+It is a standalone plugin. It does not connect to other plugins, and it does not collect information.
+
+Everything it keeps is saved on this computer. Scenes, notes, stories, and settings stay on your PC.
+
+Nothing is sent unless you choose to. A summary needs two choices: sign in to ChatGPT or Grok in Settings, then agree when Afterword asks to send that one piece of text. Until you do both, nothing is sent. Notes are never sent.
+
 ## The window
 
 The side panel lists New Scene, Import Scene, My Notebook, Characters, Storylines, Stories, Scratchpad, and Settings.
