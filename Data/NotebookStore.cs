@@ -997,6 +997,19 @@ internal sealed class NotebookStore
         }
     }
 
+    public void SetSceneNotes(Guid sceneId, string notes)
+    {
+        lock (this.gate)
+        {
+            var scene = this.FindUnlocked(sceneId);
+            if (scene == null || scene.Notes == notes)
+                return;
+
+            scene.Notes = notes;
+            this.SaveUnlocked();
+        }
+    }
+
     public string FillStorylineSummaryIfEmpty(Guid id)
     {
         lock (this.gate)

@@ -262,6 +262,8 @@ internal sealed class SceneRecorder
 
     public void SetSceneSummary(Guid sceneId, string summary) => this.store.SetSceneSummary(sceneId, summary);
 
+    public void SetSceneNotes(Guid sceneId, string notes) => this.store.SetSceneNotes(sceneId, notes);
+
     public bool AddCharacter(string name) => this.store.AddCharacter(name);
 
     public void SetCharacterNotes(string name, string notes) => this.store.SetCharacterNotes(name, notes);

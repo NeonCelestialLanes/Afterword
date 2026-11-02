@@ -50,6 +50,9 @@ internal sealed class MainWindow : Window, IDisposable
     private string importStoryline = string.Empty;
     private string playerName = string.Empty;
     private string sceneSummaryDraft = string.Empty;
+    private string sceneNotesDraft = string.Empty;
+    private Guid sceneNotesId;
+    private bool editingLog;
     private Guid sceneSummaryId;
     private string storylineSummaryDraft = string.Empty;
     private string characterSummaryDraft = string.Empty;
@@ -1579,6 +1582,34 @@ internal sealed class MainWindow : Window, IDisposable
             () => SceneTranscript(scene),
             "this scene");
         ImGui.Spacing();
+        if (this.sceneNotesId != scene.Id)
+        {
+            this.sceneNotesId = scene.Id;
+            this.sceneNotesDraft = scene.Notes ?? string.Empty;
+            this.editingLog = false;
+            this.pendingLineDelete = null;
+        }
+
+        ImGui.TextUnformatted("Notes");
+        if (ImGui.InputTextMultiline("##scene-notes", ref this.sceneNotesDraft, 4000, new Vector2(-1, 90)))
+            this.recorder.SetSceneNotes(scene.Id, this.sceneNotesDraft);
+
+        ImGui.Spacing();
+        if (CoverButton(this.editingLog ? "Done##log" : "Edit log", new Vector2(120, 30)))
+        {
+            this.editingLog = !this.editingLog;
+            this.pendingLineDelete = null;
+            this.editingLineId = null;
+        }
+
+        if (this.editingLog)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped("Remove any line you don't want. The rest of the log stays.");
+            ImGui.PopStyleColor();
+        }
+
+        ImGui.Spacing();
         if (this.ConfirmDelete(scene.Id))
         {
             this.recorder.RemoveScene(scene.Id);
@@ -1866,6 +1897,24 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Name);
         ImGui.TextUnformatted(speaker);
         ImGui.PopStyleColor();
+        if (this.editingLog && scene.Status == SceneStatus.Saved)
+        {
+            ImGui.SameLine(0, 8);
+            var removing = this.pendingLineDelete == line.Id;
+            if (CoverButton(removing ? "Remove?" : "Remove", new Vector2(removing ? 96 : 88, 24)))
+            {
+                if (!removing)
+                {
+                    this.pendingLineDelete = line.Id;
+                }
+                else
+                {
+                    this.recorder.RemoveLine(scene.Id, line.Id);
+                    this.editingLineId = null;
+                    this.pendingLineDelete = null;
+                }
+            }
+        }
 
         if (editable && this.editingLineId == line.Id)
         {
