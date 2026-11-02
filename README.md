@@ -140,9 +140,11 @@ A storyline groups scenes that share a name.
 
 ## Summaries
 
+You can write a summary yourself. Type it in the summary box on a scene, a storyline, or a character. That summary stays on this computer.
+
 Settings lets you choose **ChatGPT** or **Grok**. Sign in with the plan you already pay for. There is no API key and no second bill.
 
-Afterword asks before every scene, storyline, or character is sent. The question names the service. Only the text you confirm leaves this computer.
+Nothing is sent to ChatGPT or Grok unless you confirm it. Afterword asks before every scene, storyline, or character is sent. The question names the service. Only the text you confirm leaves this computer.
 
 A scene or storyline summary is written from the lines, in two to four sentences, naming people and what those lines show. It is not written as one of the characters. A character summary is a short portrait of the person.
 
