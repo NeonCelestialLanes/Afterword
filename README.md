@@ -6,6 +6,16 @@ The journal is named Afterword. The plugin file is `RPChronicles.dll`. Open it w
 
 You need to be logged into a character. Each character has their own notebook.
 
+## The window
+
+**Hide** is at the bottom of the side panel. It tucks that panel away and makes the window narrower, so more of the game shows. A small arrow on the left brings the panel back.
+
+**Mini**, just above Hide, opens a small window. The top says Scratchpad or Scene, and the other button switches between them. **Full** puts the large window back.
+
+The small scene uses the people and the place already chosen on **New Scene** in the full window. It does not keep a separate list. Change who is selected in the full window, and Mini follows. If nobody is selected, the scene stays quiet.
+
+**Dark mode** is in Settings. It darkens the page. The navy cover stays.
+
 ## The link to put in Dalamud
 
 Put this link in **Dalamud Settings**, on the **Experimental** tab, in **Custom Plugin Repositories**:
@@ -60,7 +70,11 @@ A line can start with a tag and a name:
 
 **Scratchpad** is in the sidebar, under Storylines. Paste or write a post. Afterword splits it so each piece fits in the chat box, breaks on a sentence when it can, and numbers the pieces `(1/2)`, `(2/2)`, and so on.
 
-Choose Say, Emote, or another channel. **Copy 1/2** puts that piece on the clipboard, command included, so you can paste it into chat and come back for the next one. A post that fits in one message is not numbered.
+The words wrap inside the box. A blank line starts a new paragraph.
+
+Choose Say, Emote, or another channel. **Copy 1/2** puts that piece on the clipboard, command included, so you can paste it into chat and come back for the next one. A post that fits in one message is not numbered. **Clear** empties the post.
+
+**Spelling** sits under the box and uses the spelling checker already on Windows. Pick a suggestion, press **Remove** for a word typed twice, or press **Keep** to leave a name alone for this session.
 
 ## Notes
 
@@ -82,11 +96,10 @@ On a character you can:
 
 A storyline groups scenes that share a name.
 
-- **Started** is the date the story began. Type a date such as `Oct 26, 2026`, then click away from the box.
-- **Ongoing** or **Completed** marks whether the story is still in play.
+- **Date** is when the story began. Type a date such as `Nov 1, 2026`. It saves once the year is clear. The list puts the newest date first. A storyline with no date stays at the bottom.
 - The storyline has its own summary, notes, and scene list.
 
-Deleting a storyline removes the group. The scenes remain in the notebook. A long story that was linked to it stays in Stories, with the storyline cleared.
+**Delete storyline** asks you to press it again. The group goes away. The scenes stay in the notebook. A long story that was linked to it stays in Stories, with the storyline cleared.
 
 ## Stories
 
@@ -114,7 +127,7 @@ Everything for this plugin is under:
 | --- | --- |
 | `notebooks\` | One notebook for each character |
 | `logs\` | One text file per scene, unless Settings points somewhere else |
-| `recording-settings.json` | Which chats are kept |
+| `recording-settings.json` | Which chats are kept, plus dark mode and the window size |
 | `summary-settings.json` | ChatGPT or Grok |
 | `chatgpt-login.json` | The ChatGPT sign-in, if you used it |
 | `grok-login.json` | The Grok sign-in, if you used it |
