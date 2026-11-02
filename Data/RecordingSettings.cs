@@ -47,6 +47,9 @@ internal sealed class RecordingSettings
     /// <summary>When on, the journal page is dark. The navy cover stays.</summary>
     public bool DarkMode { get; set; }
 
+    /// <summary>When on, the side panel is hidden so the window can be smaller.</summary>
+    public bool SidebarHidden { get; set; }
+
     [JsonIgnore]
     public string FilePath { get; set; } = string.Empty;
 

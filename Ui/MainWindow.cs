@@ -96,6 +96,12 @@ internal sealed class MainWindow : Window, IDisposable
     private int scratchNext;
     private string scratchNotice = string.Empty;
     private string scratchKey = string.Empty;
+    private string spellSeen = string.Empty;
+    private string spellChecked = string.Empty;
+    private double spellDirtyAt;
+    private List<SpellHit> spellHits = [];
+    private const float SidebarOpenWidth = 188f;
+    private const float SidebarHiddenWidth = 46f;
     private static readonly (string Label, string Header)[] ScratchChannels =
     [
         ("No command", ""),
@@ -147,7 +153,7 @@ internal sealed class MainWindow : Window, IDisposable
         this.SizeCondition = ImGuiCond.FirstUseEver;
         this.SizeConstraints = new WindowSizeConstraints
         {
-            MinimumSize = new Vector2(740, 480),
+            MinimumSize = new Vector2(520, 380),
             MaximumSize = new Vector2(1680, 1200),
         };
         this.AllowPinning = true;
@@ -403,24 +409,102 @@ internal sealed class MainWindow : Window, IDisposable
 
     private void DrawSidebar()
     {
+        var hidden = this.recorder.Settings.SidebarHidden;
         ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0f, 0f, 0f, 0f));
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 2f));
-        ImGui.BeginChild("nav", new Vector2(188, 0), false);
-        var navFontOn = this.TryPushNavFont();
-        this.DrawLogo();
-        this.NavItem("New Scene", Page.NewScene);
-        this.NavItem("Import Scene", Page.Import);
-        this.NavItem("My Notebook", Page.Notebook);
-        this.NavItem("Characters", Page.Characters);
-        this.NavItem("Storylines", Page.Storylines);
-        this.NavItem("Stories", Page.Stories);
-        this.NavItem("Scratchpad", Page.Scratchpad);
-        this.NavItem("Settings", Page.Settings);
-        if (navFontOn)
-            this.navFont!.Pop();
+        ImGui.BeginChild("nav", new Vector2(hidden ? SidebarHiddenWidth : SidebarOpenWidth, 0), false);
+        if (hidden)
+        {
+            this.DrawSidebarToggle(true);
+        }
+        else
+        {
+            var navFontOn = this.TryPushNavFont();
+            this.DrawLogo();
+            this.NavItem("New Scene", Page.NewScene);
+            this.NavItem("Import Scene", Page.Import);
+            this.NavItem("My Notebook", Page.Notebook);
+            this.NavItem("Characters", Page.Characters);
+            this.NavItem("Storylines", Page.Storylines);
+            this.NavItem("Stories", Page.Stories);
+            this.NavItem("Scratchpad", Page.Scratchpad);
+            this.NavItem("Settings", Page.Settings);
+            this.DrawSidebarToggle(false);
+            if (navFontOn)
+                this.navFont!.Pop();
+        }
+
         ImGui.EndChild();
         ImGui.PopStyleVar();
         ImGui.PopStyleColor();
+    }
+
+    private void DrawSidebarToggle(bool hidden)
+    {
+        const float height = 36f;
+        if (hidden)
+            ImGui.SetCursorPosY(8f);
+        else
+        {
+            var y = ImGui.GetWindowHeight() - height - 6f;
+            if (ImGui.GetCursorPosY() < y)
+                ImGui.SetCursorPosY(y);
+        }
+
+        var width = Math.Max(32f, ImGui.GetContentRegionAvail().X);
+        var pressed = ImGui.InvisibleButton(hidden ? "show-side" : "hide-side", new Vector2(width, height));
+        var min = ImGui.GetItemRectMin();
+        var max = ImGui.GetItemRectMax();
+        var draw = ImGui.GetWindowDrawList();
+        if (ImGui.IsItemHovered())
+        {
+            draw.AddRectFilled(
+                min + new Vector2(1f, 1f),
+                max - new Vector2(1f, 1f),
+                ImGui.GetColorU32(new Vector4(1f, 1f, 1f, 0.10f)),
+                4f);
+            ImGui.SetTooltip(hidden ? "Show the side panel" : "Hide the side panel");
+        }
+
+        var centerY = (min.Y + max.Y) * 0.5f;
+        if (hidden)
+        {
+            DrawChevron(new Vector2((min.X + max.X) * 0.5f, centerY), pointRight: true);
+        }
+        else
+        {
+            DrawChevron(new Vector2(min.X + 16f, centerY), pointRight: false);
+            var label = "Hide";
+            var textSize = ImGui.CalcTextSize(label);
+            draw.AddText(
+                new Vector2(min.X + 28f, min.Y + ((height - textSize.Y) * 0.5f)),
+                ImGui.GetColorU32(JournalTheme.CoverInk),
+                label);
+        }
+
+        if (pressed)
+            this.ToggleSidebar();
+    }
+
+    private void ToggleSidebar()
+    {
+        var settings = this.recorder.Settings;
+        settings.SidebarHidden = !settings.SidebarHidden;
+        settings.Save();
+        var delta = SidebarOpenWidth - SidebarHiddenWidth;
+        var size = ImGui.GetWindowSize();
+        var width = settings.SidebarHidden ? size.X - delta : size.X + delta;
+        width = Math.Clamp(width, 520f, 1680f);
+        ImGui.SetWindowSize(new Vector2(width, size.Y));
+    }
+
+    private static void DrawChevron(Vector2 center, bool pointRight)
+    {
+        var dir = pointRight ? 1f : -1f;
+        var draw = ImGui.GetWindowDrawList();
+        var color = ImGui.GetColorU32(JournalTheme.CoverInk);
+        draw.AddLine(center + new Vector2(-4f * dir, -6f), center + new Vector2(4f * dir, 0f), color, 1.6f);
+        draw.AddLine(center + new Vector2(4f * dir, 0f), center + new Vector2(-4f * dir, 6f), color, 1.6f);
     }
 
     private void NavItem(string label, Page target)
@@ -3038,6 +3122,91 @@ internal sealed class MainWindow : Window, IDisposable
         return space >= start ? space + 1 : best;
     }
 
+    private void DrawSpelling()
+    {
+        var draft = this.scratchDraft;
+        if (!string.Equals(draft, this.spellSeen, StringComparison.Ordinal))
+        {
+            this.spellSeen = draft;
+            this.spellDirtyAt = ImGui.GetTime();
+        }
+
+        if (draft.Length == 0)
+        {
+            this.spellHits = [];
+            this.spellChecked = string.Empty;
+        }
+        else if (this.spellDirtyAt > 0 && ImGui.GetTime() - this.spellDirtyAt >= 0.4 && !string.Equals(draft, this.spellChecked, StringComparison.Ordinal))
+        {
+            this.spellHits = WindowsSpellcheck.Check(draft);
+            this.spellChecked = draft;
+            this.spellDirtyAt = 0;
+        }
+
+        if (this.spellHits.Count == 0 || !string.Equals(draft, this.spellChecked, StringComparison.Ordinal))
+            return;
+
+        ImGui.Spacing();
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextUnformatted("Spelling");
+        ImGui.PopStyleColor();
+
+        var shown = 0;
+        foreach (var hit in this.spellHits)
+        {
+            if (shown == 5)
+                break;
+
+            shown++;
+            ImGui.PushID(hit.Start);
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Margin);
+            ImGui.TextUnformatted(hit.Word);
+            ImGui.PopStyleColor();
+
+            IReadOnlyList<string> choices = hit.Delete ? ["Remove"] : hit.Suggestions;
+            for (var i = 0; i < choices.Count && i < 3; i++)
+            {
+                var choice = choices[i];
+                var buttonWidth = Math.Max(72f, ImGui.CalcTextSize(choice).X + 28f);
+                if (ImGui.GetContentRegionAvail().X > buttonWidth + 8f)
+                    ImGui.SameLine();
+
+                if (CoverButton(choice + "##spell" + i, new Vector2(buttonWidth, 28)))
+                    this.ApplySpelling(hit, hit.Delete ? null : choice);
+            }
+
+            var keepWidth = Math.Max(64f, ImGui.CalcTextSize("Keep").X + 28f);
+            if (ImGui.GetContentRegionAvail().X > keepWidth + 8f)
+                ImGui.SameLine();
+
+            if (CoverButton("Keep##spell", new Vector2(keepWidth, 28)))
+            {
+                WindowsSpellcheck.Keep(hit.Word);
+                this.spellHits = this.spellHits.FindAll(item => !string.Equals(item.Word, hit.Word, StringComparison.OrdinalIgnoreCase));
+            }
+
+            ImGui.PopID();
+        }
+    }
+
+    private void ApplySpelling(SpellHit hit, string? replacement)
+    {
+        if (!string.Equals(this.scratchDraft, this.spellChecked, StringComparison.Ordinal))
+            return;
+
+        if (hit.Start < 0 || hit.Start + hit.Length > this.scratchDraft.Length)
+            return;
+
+        var before = this.scratchDraft[..hit.Start];
+        var after = this.scratchDraft[(hit.Start + hit.Length)..];
+        if (replacement == null && before.EndsWith(' '))
+            before = before[..^1];
+
+        this.scratchDraft = before + (replacement ?? string.Empty) + after;
+        this.spellSeen = this.scratchDraft;
+        this.spellDirtyAt = ImGui.GetTime();
+    }
+
     private void DrawScratchpad()
     {
         ImGui.TextUnformatted("Scratchpad");
@@ -3078,6 +3247,8 @@ internal sealed class MainWindow : Window, IDisposable
             ImGuiInputTextFlags.CallbackAlways | ImGuiInputTextFlags.NoHorizontalScroll,
             WrapScratchBox,
             ref wrapWidth);
+
+        this.DrawSpelling();
 
         var pieces = ScratchPad.Split(this.scratchDraft, ScratchChannels[channel].Header);
         var key = channel + "\n" + this.scratchDraft;
