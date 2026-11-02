@@ -8,13 +8,30 @@ You need to be logged into a character. Each character has their own notebook.
 
 ## The window
 
-**Hide** is at the bottom of the side panel. It tucks that panel away and makes the window narrower, so more of the game shows. A small arrow on the left brings the panel back.
+The side panel lists New Scene, Import Scene, My Notebook, Characters, Storylines, Stories, Scratchpad, and Settings.
 
-**Mini**, just above Hide, opens a small window. The top says Scratchpad or Scene, and the other button switches between them. **Full** puts the large window back.
-
-The small scene uses the people and the place already chosen on **New Scene** in the full window. It does not keep a separate list. Change who is selected in the full window, and Mini follows. If nobody is selected, the scene stays quiet.
+**Hide** is at the bottom of that panel. It tucks the panel away and makes the window narrower, so more of the game shows. A small arrow on the left brings the panel back.
 
 **Dark mode** is in Settings. It darkens the page. The navy cover stays.
+
+Hide, dark mode, and Mini are remembered the next time you open Afterword.
+
+## Mini
+
+**Mini** sits just above Hide. It opens a small window you can leave up while you roleplay. **Full** puts the large window back, at the size it had before.
+
+The top of the small window says Scratchpad or Scene. The other button switches between them.
+
+**Scratchpad** in Mini is the same post as the full window. The words wrap, **Clear** empties it, spelling sits under the box, and **Copy** still puts the next piece on the clipboard.
+
+**Scene** in Mini does not keep its own list of people or its own place. It uses what you already chose on **New Scene** in the full window.
+
+- Type a title, then press **Start recording**.
+- The line under the title says who will be recorded. That is everyone, the names you picked, or nobody.
+- If nobody is selected, the scene stays quiet until you pick someone in the full window.
+- Change the people on **New Scene**, or on **Who is in this scene** while a scene is going, and Mini follows.
+- Lines show up as people talk.
+- **Pause** stops new lines. **Resume** continues. **Stop** saves the scene into My Notebook.
 
 ## The link to put in Dalamud
 
@@ -34,6 +51,8 @@ That is the link Dalamud reads. Afterword then shows up in the plugin installer.
 
 **Pause** holds the scene and stops new lines. **Stop and save** puts it in My Notebook.
 
+While a scene is recording, what people say shows up under **Lines**. You can still change who is included. Mini uses that same choice.
+
 Say and emote are on by default. Shout, yell, tell, party, alliance, free company, linkshells, and Novice Network stay off until you turn them on in Settings.
 
 **Random rolls** is in Settings with the other chats. It is off until you turn it on. A `/random` is then saved as that person rolling a number out of a maximum. Loot rolls, combat, echoes, and other system text stay out.
@@ -46,7 +65,7 @@ A tell prefix `>>` on a name is ignored, so `>> Lucien Vaelmont` is the same per
 
 Open a scene from **My Notebook**.
 
-- Edit a speaker or a line, or delete a line.
+- Edit a speaker or a line. **Delete line** asks you to press it again.
 - **New scene starts at** takes a clock time, such as `10:45 AM`. Lines from that time on become a new scene. The scene you are in keeps the earlier lines. **New scene** on a line does the same from that line.
 - Attach the scene to a storyline.
 - Ask for a summary, or type one yourself.
@@ -88,7 +107,7 @@ On a character you can:
 
 - Rename them. Their lines are updated.
 - Mark two names as the same person and combine them. Lines and notes move onto the name you have open.
-- Delete the name and their lines.
+- **Delete character** asks you to press it again. That name and their lines are removed.
 - Write notes.
 - Ask for a summary of who they are and what they seem to want. It does not retell what they did.
 
@@ -104,6 +123,8 @@ A storyline groups scenes that share a name.
 ## Stories
 
 **Stories** is for long writing, not a chat log. A story can be attached to a storyline. **This affects the lore** marks it as background that happened. When you summarize that storyline, the story is included as lore instead of as another scene.
+
+**Delete story** asks you to press it again.
 
 ## Summaries
 
