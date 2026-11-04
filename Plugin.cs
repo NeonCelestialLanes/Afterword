@@ -127,10 +127,35 @@ public sealed class Plugin : IDalamudPlugin
 
     private static string ReadText(SeString value, ReadOnlySeString original)
     {
-        if (!string.IsNullOrWhiteSpace(value.TextValue))
-            return value.TextValue.Trim();
+        var current = value.TextValue?.Trim() ?? string.Empty;
+        var extracted = string.Empty;
+        try
+        {
+            extracted = original.ExtractText()?.Trim() ?? string.Empty;
+        }
+        catch
+        {
+            extracted = string.Empty;
+        }
 
-        var extracted = original.ExtractText();
-        return string.IsNullOrWhiteSpace(extracted) ? string.Empty : extracted.Trim();
+        if (string.IsNullOrWhiteSpace(current))
+            return extracted;
+
+        if (string.IsNullOrWhiteSpace(extracted))
+            return current;
+
+        return LetterCount(extracted) > LetterCount(current) ? extracted : current;
+    }
+
+    private static int LetterCount(string text)
+    {
+        var count = 0;
+        foreach (var letter in text)
+        {
+            if (char.IsLetter(letter))
+                count++;
+        }
+
+        return count;
     }
 }

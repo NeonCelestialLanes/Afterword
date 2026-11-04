@@ -56,6 +56,36 @@ internal static class PlayerNames
     public static string Clean(string name) => Separate(name, out _);
 
     /// <summary>
+    /// True when both strings are the same person. Extra marks or a world stuck on the name still count.
+    /// </summary>
+    public static bool Same(string left, string right)
+    {
+        var a = Letters(Clean(left));
+        var b = Letters(Clean(right));
+        if (a.Length < 2 || b.Length < 2)
+            return false;
+
+        if (string.Equals(a, b, StringComparison.Ordinal))
+            return true;
+
+        return b.StartsWith(a, StringComparison.Ordinal) && b.Length - a.Length <= 16
+            || a.StartsWith(b, StringComparison.Ordinal) && a.Length - b.Length <= 16;
+    }
+
+    private static string Letters(string name)
+    {
+        var kept = new char[name.Length];
+        var count = 0;
+        foreach (var letter in name)
+        {
+            if (char.IsLetter(letter))
+                kept[count++] = char.ToLowerInvariant(letter);
+        }
+
+        return new string(kept, 0, count);
+    }
+
+    /// <summary>
     /// A tell in a log is written as &gt;&gt; before the name. That mark is not part of the person.
     /// </summary>
     public static string DropTell(string text)
@@ -81,6 +111,8 @@ internal static class PlayerNames
         leftover = string.Empty;
         if (string.IsNullOrWhiteSpace(raw))
             return string.Empty;
+
+        raw = raw.Replace('\u00A0', ' ').Replace('\u2007', ' ').Replace('\u202F', ' ');
 
         var parts = StripMarks(DropTell(raw.Trim())).Split(' ', StringSplitOptions.RemoveEmptyEntries);
         if (parts.Length == 0)
@@ -154,7 +186,10 @@ internal static class PlayerNames
     }
 
     private static bool IsMark(char letter) =>
-        letter is '?' or '★' or '☆' or '✦' or '✧' or '※' or '⋆' or '*' or '\uFFFD';
+        letter is '?' or '★' or '☆' or '✦' or '✧' or '※' or '⋆' or '*' or '\uFFFD'
+        || char.GetUnicodeCategory(letter) is System.Globalization.UnicodeCategory.PrivateUse
+            or System.Globalization.UnicodeCategory.OtherSymbol
+            or System.Globalization.UnicodeCategory.Format;
 
     private static bool TryUnglue(string word, out string surname)
     {

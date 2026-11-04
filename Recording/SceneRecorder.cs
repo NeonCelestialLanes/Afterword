@@ -309,6 +309,7 @@ internal sealed class SceneRecorder
 
     public void Capture(XivChatType type, string speaker, string text, int timestamp)
     {
+        type = (XivChatType)((ushort)type & 0x7F);
         if (type == XivChatType.RandomNumber)
         {
             if (!this.settings.Allows(ChatChannel.Random))
@@ -340,8 +341,11 @@ internal sealed class SceneRecorder
             return;
 
         var name = PlayerNames.Clean(speaker);
-        if (string.IsNullOrWhiteSpace(name) && this.playerState.IsLoaded)
-            name = PlayerNames.Clean(this.playerState.CharacterName ?? string.Empty);
+        var mine = this.playerState.IsLoaded
+            ? PlayerNames.Clean(this.playerState.CharacterName ?? string.Empty)
+            : string.Empty;
+        if (string.IsNullOrWhiteSpace(name) || PlayerNames.Same(name, mine))
+            name = mine;
 
         this.store.AppendLine(new SceneLine
         {

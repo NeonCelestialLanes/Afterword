@@ -1581,12 +1581,7 @@ internal sealed class NotebookStore
         foreach (var name in scene.SelectedSpeakers)
         {
             var picked = PlayerNames.Clean(name);
-            if (picked.Length == 0 || who.Length == 0)
-                continue;
-
-            if (string.Equals(picked, who, StringComparison.OrdinalIgnoreCase)
-                || who.StartsWith(picked + " ", StringComparison.OrdinalIgnoreCase)
-                || picked.StartsWith(who + " ", StringComparison.OrdinalIgnoreCase))
+            if (PlayerNames.Same(picked, who))
                 return true;
         }
 
