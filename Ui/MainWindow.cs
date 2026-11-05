@@ -25,8 +25,12 @@ internal sealed class MainWindow : Window, IDisposable
     private readonly ChatGptSession chatGpt;
     private readonly GrokSession grok;
     private readonly ISharedImmediateTexture? logo;
-    private readonly IFontHandle? pageFont;
-    private readonly IFontHandle? navFont;
+    private readonly IFontHandle?[] pageFonts;
+    private readonly IFontHandle?[] navFonts;
+    private IFontHandle? pushedPageFont;
+    private IFontHandle? pushedNavFont;
+    private static readonly int[] PageFontSizes = [18, 22, 26, 30];
+    private static readonly int[] NavFontSizes = [23, 28, 33, 38];
     private Page page = Page.NewScene;
     private string titleDraft = string.Empty;
     private string renameDraft = string.Empty;
@@ -166,8 +170,8 @@ internal sealed class MainWindow : Window, IDisposable
         this.chatGpt = chatGpt;
         this.grok = grok;
         this.logo = LoadLogo(pluginInterface, textures);
-        this.pageFont = CreatePageFont(pluginInterface);
-        this.navFont = CreateNavFont(pluginInterface);
+        this.pageFonts = CreateFonts(pluginInterface, "georgia.ttf", PageFontSizes);
+        this.navFonts = CreateFonts(pluginInterface, "segoeui.ttf", NavFontSizes);
         this.mini = recorder.Settings.Mini;
         this.miniScratch = recorder.Settings.MiniScratch;
         this.Size = this.mini ? new Vector2(440, 340) : new Vector2(980, 660);
@@ -185,8 +189,10 @@ internal sealed class MainWindow : Window, IDisposable
 
     public void Dispose()
     {
-        this.pageFont?.Dispose();
-        this.navFont?.Dispose();
+        foreach (var font in this.pageFonts)
+            font?.Dispose();
+        foreach (var font in this.navFonts)
+            font?.Dispose();
     }
 
     public override void PreDraw()
@@ -340,7 +346,7 @@ internal sealed class MainWindow : Window, IDisposable
 
             ImGui.PopStyleColor();
             if (pageFontOn)
-                this.pageFont!.Pop();
+                this.PopPageFont();
             if (indent > 0f)
                 ImGui.Unindent(indent);
         }
@@ -459,7 +465,7 @@ internal sealed class MainWindow : Window, IDisposable
         var hidden = this.recorder.Settings.SidebarHidden;
         ImGui.PushStyleColor(ImGuiCol.ChildBg, new Vector4(0f, 0f, 0f, 0f));
         ImGui.PushStyleVar(ImGuiStyleVar.ItemSpacing, new Vector2(8f, 2f));
-        ImGui.BeginChild("nav", new Vector2(hidden ? SidebarHiddenWidth : SidebarOpenWidth, 0), false);
+        ImGui.BeginChild("nav", new Vector2(hidden ? SidebarHiddenWidth : this.OpenSidebarWidth(), 0), false);
         if (hidden)
         {
             this.DrawSidebarToggle(true);
@@ -476,14 +482,15 @@ internal sealed class MainWindow : Window, IDisposable
             this.NavItem("Stories", Page.Stories);
             this.NavItem("Scratchpad", Page.Scratchpad);
             this.NavItem("Settings", Page.Settings);
-            var hideY = ImGui.GetWindowHeight() - 36f - 6f;
-            var miniY = hideY - 38f;
+            var row = NavRowHeight();
+            var hideY = ImGui.GetWindowHeight() - row - 6f;
+            var miniY = hideY - row - 2f;
             if (ImGui.GetCursorPosY() < miniY)
                 ImGui.SetCursorPosY(miniY);
             this.DrawMiniEntry();
             this.DrawSidebarToggle(false);
             if (navFontOn)
-                this.navFont!.Pop();
+                this.PopNavFont();
         }
 
         ImGui.EndChild();
@@ -493,7 +500,7 @@ internal sealed class MainWindow : Window, IDisposable
 
     private void DrawSidebarToggle(bool hidden)
     {
-        const float height = 36f;
+        var height = NavRowHeight();
         if (hidden)
             ImGui.SetCursorPosY(8f);
         else
@@ -540,7 +547,7 @@ internal sealed class MainWindow : Window, IDisposable
 
     private void DrawMiniEntry()
     {
-        const float height = 36f;
+        var height = NavRowHeight();
         var width = Math.Max(32f, ImGui.GetContentRegionAvail().X);
         var pressed = ImGui.InvisibleButton("mini-mode", new Vector2(width, height));
         var min = ImGui.GetItemRectMin();
@@ -631,7 +638,7 @@ internal sealed class MainWindow : Window, IDisposable
 
             ImGui.PopStyleColor();
             if (pageFontOn)
-                this.pageFont!.Pop();
+                this.PopPageFont();
             ImGui.Unindent(10f);
         }
 
@@ -771,7 +778,8 @@ internal sealed class MainWindow : Window, IDisposable
     {
         var selected = this.page == target;
         var width = Math.Max(32f, ImGui.GetContentRegionAvail().X);
-        var pressed = ImGui.InvisibleButton(label, new Vector2(width, 38));
+        var row = NavRowHeight();
+        var pressed = ImGui.InvisibleButton(label, new Vector2(width, row));
         var min = ImGui.GetItemRectMin();
         var max = ImGui.GetItemRectMax();
         var hovered = ImGui.IsItemHovered();
@@ -805,7 +813,7 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         var textSize = ImGui.CalcTextSize(label);
-        var textPos = new Vector2(min.X + 8f, min.Y + ((38f - textSize.Y) * 0.5f));
+        var textPos = new Vector2(min.X + 8f, min.Y + ((row - textSize.Y) * 0.5f));
         draw.AddText(textPos, ImGui.GetColorU32(JournalTheme.CoverInk), label);
 
         if (!pressed)
@@ -2177,6 +2185,28 @@ internal sealed class MainWindow : Window, IDisposable
         var settings = this.recorder.Settings;
         ImGui.TextUnformatted("Settings");
         ImGui.Spacing();
+        ImGui.TextUnformatted("Font size");
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Makes the writing bigger. Usual is the size it is now.");
+        ImGui.PopStyleColor();
+        ImGui.Spacing();
+        var fontStep = this.FontStep();
+        string[] fontSizes = ["Usual", "Bigger", "Large", "Largest"];
+        for (var i = 0; i < fontSizes.Length; i++)
+        {
+            if (i > 0)
+                ImGui.SameLine();
+
+            if (!ImGui.RadioButton(fontSizes[i], fontStep == i))
+                continue;
+
+            settings.FontSize = i;
+            settings.Save();
+        }
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
         var dark = settings.DarkMode;
         if (ImGui.Checkbox("Dark mode", ref dark))
         {
@@ -2404,8 +2434,18 @@ internal sealed class MainWindow : Window, IDisposable
 
     private static bool CoverButton(string label, Vector2 size)
     {
+        var text = label;
+        var marker = text.IndexOf("##", StringComparison.Ordinal);
+        if (marker >= 0)
+            text = text[..marker];
+
+        var textSize = ImGui.CalcTextSize(text);
+        if (size.Y < textSize.Y + 12f)
+            size.Y = textSize.Y + 12f;
+        if (size.X >= 0 && size.X < textSize.X + 24f)
+            size.X = textSize.X + 24f;
         if (size.X < 0)
-            size.X = Math.Max(32f, ImGui.GetContentRegionAvail().X);
+            size.X = Math.Max(textSize.X + 24f, ImGui.GetContentRegionAvail().X);
 
         var pressed = ImGui.InvisibleButton(label, size);
         var min = ImGui.GetItemRectMin();
@@ -2414,12 +2454,6 @@ internal sealed class MainWindow : Window, IDisposable
         var hovered = ImGui.IsItemHovered();
         DrawRaisedFace(min, max, held, hovered);
 
-        var text = label;
-        var marker = text.IndexOf("##", StringComparison.Ordinal);
-        if (marker >= 0)
-            text = text[..marker];
-
-        var textSize = ImGui.CalcTextSize(text);
         var textPos = min + ((max - min - textSize) * 0.5f);
         if (held)
             textPos.Y += 1f;
@@ -2498,50 +2532,86 @@ internal sealed class MainWindow : Window, IDisposable
             1.25f);
     }
 
+    private int FontStep()
+    {
+        var step = this.recorder.Settings.FontSize;
+        if (step < 0)
+            return 0;
+        if (step >= PageFontSizes.Length)
+            return PageFontSizes.Length - 1;
+
+        return step;
+    }
+
+    private float OpenSidebarWidth() => SidebarOpenWidth + (this.FontStep() * 32f);
+
+    private static float NavRowHeight() => Math.Max(38f, ImGui.GetFontSize() + 14f);
+
+    private IFontHandle? FontAt(IFontHandle?[] fonts)
+    {
+        var step = this.FontStep();
+        return step < fonts.Length ? fonts[step] : null;
+    }
+
     private bool TryPushNavFont()
     {
-        if (this.navFont is not { Available: true })
+        this.pushedNavFont = null;
+        var font = this.FontAt(this.navFonts);
+        if (font is not { Available: true })
             return false;
 
-        this.navFont.Push();
+        font.Push();
+        this.pushedNavFont = font;
         return true;
+    }
+
+    private void PopNavFont()
+    {
+        this.pushedNavFont?.Pop();
+        this.pushedNavFont = null;
     }
 
     private bool TryPushPageFont()
     {
-        if (this.pageFont is not { Available: true })
+        this.pushedPageFont = null;
+        var font = this.FontAt(this.pageFonts);
+        if (font is not { Available: true })
             return false;
 
-        this.pageFont.Push();
+        font.Push();
         if (ImGui.GetFontSize() >= 13f)
+        {
+            this.pushedPageFont = font;
             return true;
+        }
 
-        this.pageFont.Pop();
+        font.Pop();
         return false;
     }
 
-    private static IFontHandle? CreatePageFont(IDalamudPluginInterface pluginInterface)
+    private void PopPageFont()
     {
-        var fontPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "georgia.ttf");
-        if (!File.Exists(fontPath))
-            return null;
-
-        return pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
-        {
-            toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 18 });
-        }));
+        this.pushedPageFont?.Pop();
+        this.pushedPageFont = null;
     }
 
-    private static IFontHandle? CreateNavFont(IDalamudPluginInterface pluginInterface)
+    private static IFontHandle?[] CreateFonts(IDalamudPluginInterface pluginInterface, string fileName, int[] sizes)
     {
-        var fontPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), "segoeui.ttf");
+        var handles = new IFontHandle?[sizes.Length];
+        var fontPath = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.Fonts), fileName);
         if (!File.Exists(fontPath))
-            return null;
+            return handles;
 
-        return pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
+        for (var i = 0; i < sizes.Length; i++)
         {
-            toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = 23 });
-        }));
+            var size = sizes[i];
+            handles[i] = pluginInterface.UiBuilder.FontAtlas.NewDelegateFontHandle(e => e.OnPreBuild(toolkit =>
+            {
+                toolkit.Font = toolkit.AddFontFromFile(fontPath, new SafeFontConfig { SizePx = size });
+            }));
+        }
+
+        return handles;
     }
 
     private static void DrawStatusDot(SceneStatus status)
