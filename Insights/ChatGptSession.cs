@@ -104,7 +104,7 @@ internal sealed class ChatGptSession
 
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
             var context = await WaitForCallback(listener).ConfigureAwait(false);
-            var query = ParseQuery(context.Request.Url?.Query);
+            var query = ParseQuery(CallbackQuery(context.Request));
             Reply(context);
 
             if (!string.Equals(query.GetValueOrDefault("state"), state, StringComparison.Ordinal))
@@ -276,7 +276,7 @@ internal sealed class ChatGptSession
         using var response = await client.SendAsync(request).ConfigureAwait(false);
         var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
         if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException("ChatGPT did not finish signing in. Try again.");
+            throw new InvalidOperationException(SignInRefusal(payload));
 
         return JsonConvert.DeserializeObject<TokenResponse>(payload)
             ?? throw new InvalidOperationException("ChatGPT did not finish signing in. Try again.");
@@ -332,12 +332,60 @@ internal sealed class ChatGptSession
 
     private static async Task<HttpListenerContext> WaitForCallback(HttpListener listener)
     {
-        var wait = listener.GetContextAsync();
-        var done = await Task.WhenAny(wait, Task.Delay(TimeSpan.FromMinutes(3))).ConfigureAwait(false);
-        if (done != wait)
-            throw new InvalidOperationException("Sign-in timed out. Try again and finish it in the browser.");
+        var deadline = DateTime.UtcNow.AddMinutes(3);
+        while (true)
+        {
+            var remaining = deadline - DateTime.UtcNow;
+            if (remaining <= TimeSpan.Zero)
+                throw new InvalidOperationException("Sign-in timed out. Try again and finish it in the browser.");
 
-        return await wait.ConfigureAwait(false);
+            var wait = listener.GetContextAsync();
+            var done = await Task.WhenAny(wait, Task.Delay(remaining)).ConfigureAwait(false);
+            if (done != wait)
+                throw new InvalidOperationException("Sign-in timed out. Try again and finish it in the browser.");
+
+            var context = await wait.ConfigureAwait(false);
+            var query = ParseQuery(CallbackQuery(context.Request));
+            if (query.ContainsKey("code") || query.ContainsKey("error") || query.ContainsKey("state"))
+                return context;
+
+            try
+            {
+                Reply(context);
+            }
+            catch
+            {
+                // A blank browser hit is not the sign-in. Keep waiting for ChatGPT's reply.
+            }
+        }
+    }
+
+    private static string CallbackQuery(HttpListenerRequest request)
+    {
+        if (!string.IsNullOrEmpty(request.Url?.Query))
+            return request.Url!.Query;
+
+        var raw = request.RawUrl ?? string.Empty;
+        var split = raw.IndexOf('?');
+        return split >= 0 ? raw[split..] : string.Empty;
+    }
+
+    private static string SignInRefusal(string payload)
+    {
+        var code = string.Empty;
+        try
+        {
+            code = JObject.Parse(payload)["error"]?.ToString() ?? string.Empty;
+        }
+        catch
+        {
+            code = string.Empty;
+        }
+
+        if (string.Equals(code, "invalid_grant", StringComparison.Ordinal))
+            return "ChatGPT rejected that sign-in. Try again, and finish it in the same browser window.";
+
+        return "ChatGPT did not finish signing in. Try again.";
     }
 
     private static void Reply(HttpListenerContext context)
