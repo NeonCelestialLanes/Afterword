@@ -2187,7 +2187,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.TextUnformatted("Font size");
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextWrapped("Makes the writing bigger. Usual is the size it is now.");
+        ImGui.TextWrapped("Usual is the default size.");
         ImGui.PopStyleColor();
         ImGui.Spacing();
         var fontStep = this.FontStep();
