@@ -33,6 +33,7 @@ public sealed class Plugin : IDalamudPlugin
         IClientState clientState,
         IPlayerState playerState,
         IObjectTable objectTable,
+        ITargetManager targets,
         IDataManager dataManager,
         ITextureProvider textures,
         IPluginLog log)
@@ -58,10 +59,11 @@ public sealed class Plugin : IDalamudPlugin
             }
         }
 
-        this.recorder = new SceneRecorder(store, settings, objectTable, playerState, clientState, dataManager, chatGui, log);
+        this.recorder = new SceneRecorder(store, settings, objectTable, targets, playerState, clientState, dataManager, chatGui, log);
 
         var window = new MainWindow(pluginInterface, textures, this.recorder, summarySettings, chatGpt, grok);
         this.window = window;
+        this.recorder.JournalIsOpen = () => window.IsOpen;
         this.windowSystem.AddWindow(window);
 
         if (commandManager.Commands.ContainsKey(CommandName))

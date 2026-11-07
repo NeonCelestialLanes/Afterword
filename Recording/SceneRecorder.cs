@@ -1,5 +1,6 @@
 using System;
 using System.Collections.Generic;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.ClientState.Objects.SubKinds;
 using Dalamud.Game.Text;
 using Dalamud.Plugin.Services;
@@ -16,6 +17,7 @@ internal sealed class SceneRecorder
     private readonly NotebookStore store;
     private readonly RecordingSettings settings;
     private readonly IObjectTable objects;
+    private readonly ITargetManager targets;
     private readonly IPlayerState playerState;
     private readonly IClientState clientState;
     private readonly IDataManager dataManager;
@@ -30,6 +32,7 @@ internal sealed class SceneRecorder
         NotebookStore store,
         RecordingSettings settings,
         IObjectTable objects,
+        ITargetManager targets,
         IPlayerState playerState,
         IClientState clientState,
         IDataManager dataManager,
@@ -39,6 +42,7 @@ internal sealed class SceneRecorder
         this.store = store;
         this.settings = settings;
         this.objects = objects;
+        this.targets = targets;
         this.playerState = playerState;
         this.clientState = clientState;
         this.dataManager = dataManager;
@@ -50,6 +54,9 @@ internal sealed class SceneRecorder
     }
 
     public RecordingSettings Settings => this.settings;
+
+    /// <summary>True while the journal window is still open, including when it is only minimized.</summary>
+    public Func<bool>? JournalIsOpen { get; set; }
 
     public string LogFolder => this.store.LogFolder;
 
@@ -319,7 +326,7 @@ internal sealed class SceneRecorder
             if (!RandomRolls.TryRead(speaker, text, self, out var roller, out var rolled))
                 return;
 
-            this.store.AppendLine(new SceneLine
+            this.Heard(new SceneLine
             {
                 At = FromGameTime(timestamp),
                 Speaker = roller,
@@ -347,7 +354,7 @@ internal sealed class SceneRecorder
         if (string.IsNullOrWhiteSpace(name) || PlayerNames.Same(name, mine))
             name = mine;
 
-        this.store.AppendLine(new SceneLine
+        this.Heard(new SceneLine
         {
             At = FromGameTime(timestamp),
             Speaker = name,
@@ -355,6 +362,48 @@ internal sealed class SceneRecorder
             Kind = SupportedChat.KindFor(channel),
             Text = PlayerNames.DropTell(PlayerNames.StripLeadingMark(spoken)),
         });
+    }
+
+    private void Heard(SceneLine line)
+    {
+        this.store.AppendLine(line);
+        this.MaybePlay(line.Speaker);
+    }
+
+    private void MaybePlay(string speaker)
+    {
+        var who = this.settings.LineAlert;
+        var sound = this.settings.LineSound;
+        if (who == 0 || sound is < 1 or > LineSounds.Count || string.IsNullOrWhiteSpace(speaker))
+            return;
+
+        if (this.JournalIsOpen?.Invoke() != true)
+            return;
+
+        var mine = this.playerState.IsLoaded
+            ? PlayerNames.Clean(this.playerState.CharacterName ?? string.Empty)
+            : string.Empty;
+        if (PlayerNames.Same(speaker, mine))
+            return;
+
+        var play = who switch
+        {
+            1 => this.IsTarget(speaker),
+            2 => this.store.IsInSceneCast(speaker),
+            3 => true,
+            _ => false,
+        };
+        if (play)
+            LineSounds.Play(sound);
+    }
+
+    private bool IsTarget(string speaker)
+    {
+        var target = this.targets.Target;
+        if (target == null || target.ObjectKind != ObjectKind.Pc)
+            return false;
+
+        return PlayerNames.Same(speaker, target.Name.TextValue ?? string.Empty);
     }
 
     public void Flush() => this.store.Flush();

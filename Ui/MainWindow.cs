@@ -2207,6 +2207,60 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
+        ImGui.TextUnformatted("Line sound");
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Plays one of Snooper's chat sounds when someone else says a line. Your own lines stay quiet.");
+        ImGui.PopStyleColor();
+        ImGui.Spacing();
+        string[] whoLabels = ["Off", "Targeted", "Selected in the scene", "Everyone"];
+        var who = settings.LineAlert;
+        if (who < 0 || who >= whoLabels.Length)
+            who = 0;
+
+        for (var i = 0; i < whoLabels.Length; i++)
+        {
+            if (!ImGui.RadioButton(whoLabels[i] + "##sound-who", who == i))
+                continue;
+
+            settings.LineAlert = i;
+            settings.Save();
+        }
+
+        ImGui.Spacing();
+        var sound = settings.LineSound;
+        if (sound < 0 || sound > LineSounds.Count)
+            sound = 0;
+
+        ImGui.SetNextItemWidth(240f);
+        PushPaperPopup();
+        if (ImGui.BeginCombo("##line-sound", LineSounds.Name(sound)))
+        {
+            for (var i = 0; i <= LineSounds.Count; i++)
+            {
+                if (!ImGui.Selectable(LineSounds.Name(i), i == sound))
+                    continue;
+
+                sound = i;
+                settings.LineSound = i;
+                settings.Save();
+                LineSounds.Play(i);
+            }
+
+            ImGui.EndCombo();
+        }
+
+        ImGui.PopStyleColor(5);
+        ImGui.SameLine();
+        if (CoverButton("Hear it", new Vector2(110, 28)))
+            LineSounds.Play(settings.LineSound);
+
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Targeted is the person you have targeted. Selected in the scene is the people checked on the scene. Everyone is any line from the chats you record. It stays quiet after you press the X. A minimized window still plays.");
+        ImGui.PopStyleColor();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
         var dark = settings.DarkMode;
         if (ImGui.Checkbox("Dark mode", ref dark))
         {

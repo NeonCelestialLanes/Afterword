@@ -1616,6 +1616,24 @@ internal sealed class NotebookStore
 
     private SceneRecord? ActiveUnlocked() => ActiveOn(this.current);
 
+    public bool IsInSceneCast(string speaker)
+    {
+        lock (this.gate)
+        {
+            var scene = ActiveOn(this.RecordingFile());
+            if (scene?.SelectedSpeakers == null)
+                return false;
+
+            foreach (var name in scene.SelectedSpeakers)
+            {
+                if (PlayerNames.Same(name, speaker))
+                    return true;
+            }
+
+            return false;
+        }
+    }
+
     private NotebookFile? RecordingFile()
     {
         if (!this.isLoggedIn || this.loggedInId == 0)

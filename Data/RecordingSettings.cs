@@ -50,6 +50,12 @@ internal sealed class RecordingSettings
     /// <summary>0 is the usual size. 1 to 3 make the writing bigger.</summary>
     public int FontSize { get; set; }
 
+    /// <summary>0 is off. 1 is the current target. 2 is the people checked on the scene. 3 is everyone.</summary>
+    public int LineAlert { get; set; }
+
+    /// <summary>0 is no sound. 1 through 16 are the same chat sounds Snooper uses.</summary>
+    public int LineSound { get; set; }
+
     /// <summary>When on, the side panel is hidden so the window can be smaller.</summary>
     public bool SidebarHidden { get; set; }
 
