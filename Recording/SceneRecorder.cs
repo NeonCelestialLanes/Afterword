@@ -27,6 +27,10 @@ internal sealed class SceneRecorder
     private string cachedPlace = "Unknown location";
     private bool marksCleaned;
     private bool worldsApplied;
+    private readonly List<SceneLine> recentLines = new();
+    private readonly object recentGate = new();
+    private static readonly TimeSpan RecentLimit = TimeSpan.FromHours(1);
+    private static readonly TimeSpan AddedWindow = TimeSpan.FromMinutes(10);
 
     public SceneRecorder(
         NotebookStore store,
@@ -93,12 +97,37 @@ internal sealed class SceneRecorder
     {
         this.worldsApplied = false;
         this.RememberCharacter();
+        if (!this.settings.RecordAlways)
+            return;
+
+        if (!this.store.ResumeAlwaysRecording())
+            this.store.EnsureAlwaysRecording(this.CurrentPlace);
     }
 
     public void OnLogout()
     {
-        if (this.store.MarkLoggedOut())
-            this.chat.Print("Afterword paused. Log back in and press Resume to continue the scene.");
+        if (!this.store.MarkLoggedOut())
+            return;
+
+        this.chat.Print(this.settings.RecordAlways
+            ? "Afterword paused until you log back in."
+            : "Afterword paused. Log back in and press Resume to continue the scene.");
+    }
+
+    /// <summary>Opens a scene when record-all-the-time is on and nothing is already open.</summary>
+    public void KeepRolling()
+    {
+        if (!this.settings.RecordAlways)
+            return;
+
+        this.store.EnsureAlwaysRecording(this.CurrentPlace);
+    }
+
+    /// <summary>Turns record-all-the-time on for the character who is logged in.</summary>
+    public void EnableAlways()
+    {
+        if (!this.store.ResumeAlwaysRecording())
+            this.store.EnsureAlwaysRecording(this.CurrentPlace);
     }
 
     public IReadOnlyList<PlayerCharacter> Players() => this.store.ListPlayers();
@@ -157,6 +186,7 @@ internal sealed class SceneRecorder
 
         this.chat.Print("Afterword saved the scene to your notebook.");
         this.log.Information("Saved a scene.");
+        this.KeepRolling();
     }
 
     public void Rename(Guid sceneId, string title) => this.store.Rename(sceneId, title);
@@ -289,7 +319,16 @@ internal sealed class SceneRecorder
 
     public void SetEveryone(bool everyone) => this.store.SetEveryone(everyone);
 
-    public void IncludeSpeaker(string name, bool include) => this.store.IncludeSpeaker(name, include);
+    public int IncludeSpeaker(string name, bool include)
+    {
+        this.store.IncludeSpeaker(name, include);
+        if (!include)
+            return 0;
+
+        return this.store.AddEarlierLines(name, this.CopyRecent(), AddedWindow);
+    }
+
+    public int IncludeEarlier(string name) => this.store.AddEarlierLines(name, this.CopyRecent(), RecentLimit);
 
     public IReadOnlyList<string> NearbyNames()
     {
@@ -366,6 +405,11 @@ internal sealed class SceneRecorder
 
     private void Heard(SceneLine line)
     {
+        if (line.Id == Guid.Empty)
+            line.Id = Guid.NewGuid();
+
+        this.KeepRolling();
+        this.Remember(line);
         this.store.AppendLine(line);
         this.MaybePlay(line.Speaker);
     }
@@ -404,6 +448,35 @@ internal sealed class SceneRecorder
             return false;
 
         return PlayerNames.Same(speaker, target.Name.TextValue ?? string.Empty);
+    }
+
+    private void Remember(SceneLine line)
+    {
+        var copy = line.Copy();
+        lock (this.recentGate)
+        {
+            this.recentLines.Add(copy);
+            this.TrimRecent();
+        }
+    }
+
+    private List<SceneLine> CopyRecent()
+    {
+        lock (this.recentGate)
+        {
+            this.TrimRecent();
+            var copy = new List<SceneLine>(this.recentLines.Count);
+            foreach (var line in this.recentLines)
+                copy.Add(line.Copy());
+
+            return copy;
+        }
+    }
+
+    private void TrimRecent()
+    {
+        var cutoff = DateTimeOffset.Now - RecentLimit;
+        this.recentLines.RemoveAll(line => line.At < cutoff);
     }
 
     public void Flush() => this.store.Flush();

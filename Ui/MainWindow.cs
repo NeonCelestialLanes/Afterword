@@ -46,6 +46,7 @@ internal sealed class MainWindow : Window, IDisposable
     private bool draftEveryone = true;
     private readonly List<string> draftCast = new();
     private string draftName = string.Empty;
+    private string castNotice = string.Empty;
     private readonly FileDialogManager dialogs = new();
     private string importMessage = string.Empty;
     private SceneRecord? pendingImport;
@@ -292,6 +293,7 @@ internal sealed class MainWindow : Window, IDisposable
     {
         this.frameWindowSize = ImGui.GetWindowSize();
         this.ApplyPendingSummary();
+        this.recorder.KeepRolling();
         var snapshot = this.recorder.Snapshot();
         if (this.mini)
         {
@@ -744,7 +746,7 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (CoverButton("Stop##mini", new Vector2(72, 28)))
+        if (CoverButton(this.recorder.Settings.RecordAlways ? "Save##mini" : "Stop##mini", new Vector2(72, 28)))
             this.recorder.Stop();
 
         ImGui.Spacing();
@@ -990,7 +992,9 @@ internal sealed class MainWindow : Window, IDisposable
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
             ImGui.TextUnformatted(string.IsNullOrWhiteSpace(snapshot.CharacterLabel)
-                ? "Log into a character to start a scene. Nothing is recorded until you press Start."
+                ? this.recorder.Settings.RecordAlways
+                    ? "Log into a character. Lines are kept once you are in."
+                    : "Log into a character to start a scene. Nothing is recorded until you press Start."
                 : $"Logged out. This is {snapshot.CharacterLabel}'s notebook. Recording is paused.");
             ImGui.PopStyleColor();
             ImGui.Separator();
@@ -1289,7 +1293,7 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.InputTextWithHint("##new-place", "A letter, a dream, or where you are", ref this.placeDraft, 80);
         ImGui.Spacing();
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-        ImGui.TextUnformatted("Only the chats turned on in Settings are kept, and nothing from before you press Start.");
+        ImGui.TextUnformatted("Only the chats turned on in Settings are kept, and nothing from before you press Start. Adding someone during the scene can bring in their recent lines.");
         ImGui.PopStyleColor();
         ImGui.Spacing();
         this.DrawCast(live: false, scene: null);
@@ -1358,10 +1362,14 @@ internal sealed class MainWindow : Window, IDisposable
         }
 
         ImGui.SameLine();
-        if (CoverButton("Stop and save", new Vector2(140, 30)))
+        var saveScene = this.recorder.Settings.RecordAlways;
+        if (CoverButton(saveScene ? "Save" : "Stop and save", new Vector2(saveScene ? 100 : 140, 30)))
         {
             var id = scene.Id;
             this.recorder.Stop();
+            if (saveScene)
+                return;
+
             this.openSceneId = id;
             this.page = Page.Notebook;
             return;
@@ -2165,13 +2173,20 @@ internal sealed class MainWindow : Window, IDisposable
         foreach (var name in names)
         {
             var on = ContainsName(selected, name);
-            if (!ImGui.Checkbox($"{name}##cast", ref on))
+            if (ImGui.Checkbox($"{name}##cast", ref on))
+            {
+                if (live)
+                    this.NoteCast(name, on, this.recorder.IncludeSpeaker(name, on), earlier: false);
+                else
+                    this.SetDraft(name, on);
+            }
+
+            if (!live || !on)
                 continue;
 
-            if (live)
-                this.recorder.IncludeSpeaker(name, on);
-            else
-                this.SetDraft(name, on);
+            ImGui.SameLine();
+            if (CoverButton($"Past hour##{name}", new Vector2(118, 28)))
+                this.NoteCast(name, true, this.recorder.IncludeEarlier(name), earlier: true);
         }
 
         ImGui.SetNextItemWidth(220);
@@ -2180,7 +2195,7 @@ internal sealed class MainWindow : Window, IDisposable
         if (CoverButton("Add##cast", new Vector2(72, 28)) && !string.IsNullOrWhiteSpace(this.draftName))
         {
             if (live)
-                this.recorder.IncludeSpeaker(this.draftName, true);
+                this.NoteCast(this.draftName, true, this.recorder.IncludeSpeaker(this.draftName, true), earlier: false);
             else
                 this.SetDraft(this.draftName, true);
 
@@ -2191,6 +2206,13 @@ internal sealed class MainWindow : Window, IDisposable
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
             ImGui.TextUnformatted("Nobody is selected, so the scene stays quiet until you add someone.");
+            ImGui.PopStyleColor();
+        }
+
+        if (live && !string.IsNullOrWhiteSpace(this.castNotice))
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextWrapped(this.castNotice);
             ImGui.PopStyleColor();
         }
     }
@@ -2304,6 +2326,23 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
         ImGui.TextWrapped("Darkens the page. The navy cover stays.");
         ImGui.PopStyleColor();
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        ImGui.TextUnformatted("Record all the time");
+        var always = settings.RecordAlways;
+        if (ImGui.Checkbox("Record all the time##setting", ref always))
+        {
+            settings.RecordAlways = always;
+            settings.Save();
+            if (always)
+                this.recorder.EnableAlways();
+        }
+
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Lines are kept from the moment you log in. Press Save when a scene is finished, and the next one starts.");
+        ImGui.PopStyleColor();
+
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
@@ -2462,6 +2501,32 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.TextWrapped(this.grok.Status);
             ImGui.PopStyleColor();
         }
+    }
+
+    private void NoteCast(string name, bool include, int added, bool earlier)
+    {
+        var who = PlayerNames.Clean(name);
+        if (!include || who.Length == 0)
+        {
+            this.castNotice = string.Empty;
+            return;
+        }
+
+        if (earlier)
+        {
+            this.castNotice = added == 0
+                ? $"No earlier lines from {who} in the past hour."
+                : added == 1
+                    ? $"Brought in 1 earlier line from {who}. You can edit it after the scene is saved."
+                    : $"Brought in {added} earlier lines from {who}. You can edit them after the scene is saved.";
+            return;
+        }
+
+        this.castNotice = added == 0
+            ? $"{who} is in the scene. Past hour can bring in earlier lines."
+            : added == 1
+                ? $"Brought in 1 line from {who}, from the last 10 minutes."
+                : $"Brought in {added} lines from {who}, from the last 10 minutes.";
     }
 
     private void SetDraft(string name, bool include)

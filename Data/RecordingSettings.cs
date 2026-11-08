@@ -59,6 +59,9 @@ internal sealed class RecordingSettings
     /// <summary>0 is no sound. 1 through 16 are the same chat sounds Snooper uses.</summary>
     public int LineSound { get; set; }
 
+    /// <summary>When on, a scene is recording whenever this character is logged in. Save ends it and starts the next.</summary>
+    public bool RecordAlways { get; set; }
+
     /// <summary>When on, the side panel is hidden so the window can be smaller.</summary>
     public bool SidebarHidden { get; set; }
 

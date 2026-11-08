@@ -274,6 +274,47 @@ internal sealed class NotebookStore
         }
     }
 
+    /// <summary>Starts a scene on the logged-in character when nothing is already open.</summary>
+    public void EnsureAlwaysRecording(string place)
+    {
+        lock (this.gate)
+        {
+            var file = this.RecordingFile();
+            if (file == null || ActiveOn(file) != null)
+                return;
+
+            file.Scenes ??= new List<SceneRecord>();
+            file.Scenes.Add(new SceneRecord
+            {
+                Id = Guid.NewGuid(),
+                Title = DefaultTitle(),
+                Location = string.IsNullOrWhiteSpace(place) ? "Unknown location" : place.Trim(),
+                StartedAt = DateTimeOffset.Now,
+                Status = SceneStatus.Recording,
+                Mode = RecordingMode.Everyone,
+                SelectedSpeakers = new List<string>(),
+            });
+            this.SaveFile(file);
+        }
+    }
+
+    /// <summary>Continues a paused scene for the logged-in character.</summary>
+    public bool ResumeAlwaysRecording()
+    {
+        lock (this.gate)
+        {
+            var file = this.RecordingFile();
+            var active = ActiveOn(file);
+            if (active?.Status != SceneStatus.Paused)
+                return false;
+
+            active.Status = SceneStatus.Recording;
+            active.Interrupted = false;
+            this.SaveFile(file!);
+            return true;
+        }
+    }
+
     public bool TryStart(string title, string location, bool everyone, IReadOnlyList<string> cast, out Guid sceneId)
     {
         sceneId = Guid.Empty;
@@ -388,6 +429,44 @@ internal sealed class NotebookStore
                 active.Mode = RecordingMode.SelectedCharacters;
 
             this.SaveUnlocked();
+        }
+    }
+
+    public int AddEarlierLines(string name, IReadOnlyList<SceneLine> recent, TimeSpan within)
+    {
+        lock (this.gate)
+        {
+            var active = this.ActiveUnlocked();
+            if (active == null)
+                return 0;
+
+            var who = PlayerNames.Clean(name);
+            if (who.Length == 0 || recent.Count == 0)
+                return 0;
+
+            active.Lines ??= new List<SceneLine>();
+            var cutoff = DateTimeOffset.Now - within;
+            var added = 0;
+            foreach (var source in recent)
+            {
+                if (source.At < cutoff || !PlayerNames.Same(PlayerNames.Clean(source.Speaker), who))
+                    continue;
+
+                if (ContainsLine(active.Lines, source))
+                    continue;
+
+                var copy = source.Copy();
+                if (copy.Id == Guid.Empty)
+                    copy.Id = Guid.NewGuid();
+
+                InsertByTime(active.Lines, copy);
+                added++;
+            }
+
+            if (added > 0)
+                this.SaveUnlocked();
+
+            return added;
         }
     }
 
@@ -1416,6 +1495,9 @@ internal sealed class NotebookStore
             if (active.Mode == RecordingMode.SelectedCharacters && !IsSelected(active, line.Speaker))
                 return;
 
+            if (line.Id == Guid.Empty)
+                line.Id = Guid.NewGuid();
+
             active.Lines.Add(line);
             this.SaveFile(recording!);
         }
@@ -1573,6 +1655,37 @@ internal sealed class NotebookStore
                 Notes = new List<JournalNote>(this.current.Notes ?? new List<JournalNote>()),
             };
         }
+    }
+
+    private static bool ContainsLine(List<SceneLine> lines, SceneLine candidate)
+    {
+        foreach (var line in lines)
+        {
+            if (candidate.Id != Guid.Empty && line.Id == candidate.Id)
+                return true;
+
+            if (line.At == candidate.At
+                && PlayerNames.Same(line.Speaker, candidate.Speaker)
+                && string.Equals(line.Text, candidate.Text, StringComparison.Ordinal))
+                return true;
+        }
+
+        return false;
+    }
+
+    private static void InsertByTime(List<SceneLine> lines, SceneLine line)
+    {
+        var index = lines.Count;
+        for (var i = 0; i < lines.Count; i++)
+        {
+            if (lines[i].At <= line.At)
+                continue;
+
+            index = i;
+            break;
+        }
+
+        lines.Insert(index, line);
     }
 
     private static bool IsSelected(SceneRecord scene, string speaker)
@@ -1912,25 +2025,36 @@ internal sealed class NotebookStore
             if (!string.IsNullOrWhiteSpace(world))
                 file.World = world;
 
+            var changed = false;
             var recovered = false;
             foreach (var scene in file.Scenes)
             {
                 scene.Lines ??= new List<SceneLine>();
                 scene.Tags ??= new List<string>();
                 scene.SelectedSpeakers ??= new List<string>();
+                foreach (var line in scene.Lines)
+                {
+                    if (line.Id != Guid.Empty)
+                        continue;
+
+                    line.Id = Guid.NewGuid();
+                    changed = true;
+                }
+
                 if (scene.Status != SceneStatus.Recording)
                     continue;
 
                 scene.Status = SceneStatus.Paused;
                 scene.Interrupted = true;
+                changed = true;
                 recovered = true;
             }
 
-            if (recovered)
-            {
+            if (changed)
                 this.Write(path, file);
+
+            if (recovered)
                 this.log.Information("A scene was still recording when the game closed. Its lines were kept and the scene is paused.");
-            }
 
             return file;
         }
