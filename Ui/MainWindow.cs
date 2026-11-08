@@ -116,6 +116,17 @@ internal sealed class MainWindow : Window, IDisposable
     private string spellChecked = string.Empty;
     private double spellDirtyAt;
     private List<SpellHit> spellHits = [];
+    private int scratchCursor;
+    private int scratchSelA;
+    private int scratchSelB;
+    private double scratchClickAt;
+    private bool scratchWordPending;
+    private bool thesaurusOpen;
+    private Vector2 thesaurusPos;
+    private string thesaurusWord = string.Empty;
+    private int thesaurusStart;
+    private int thesaurusLength;
+    private List<string> thesaurusWords = [];
     private const float SidebarOpenWidth = 188f;
     private const float SidebarHiddenWidth = 46f;
     private Vector2 frameWindowSize;
@@ -1005,7 +1016,11 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Separator();
     }
 
-    public void DrawDialogs() => this.dialogs.Draw();
+    public void DrawDialogs()
+    {
+        this.dialogs.Draw();
+        this.DrawThesaurusWindow();
+    }
 
     private void DrawImport(NotebookSnapshot snapshot)
     {
@@ -2207,6 +2222,23 @@ internal sealed class MainWindow : Window, IDisposable
         ImGui.Spacing();
         ImGui.Separator();
         ImGui.Spacing();
+        ImGui.TextUnformatted("Thesaurus");
+        var thesaurus = settings.Thesaurus;
+        if (ImGui.Checkbox("Thesaurus##setting", ref thesaurus))
+        {
+            settings.Thesaurus = thesaurus;
+            settings.Save();
+            if (!thesaurus)
+                this.thesaurusOpen = false;
+        }
+
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextWrapped("Turn this on, then double-click a word in the scratchpad. A window opens with other words. Click one to use it in place of the word you chose. The writing size above changes this window too.");
+        ImGui.PopStyleColor();
+
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
         ImGui.TextUnformatted("Line sound");
         ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
         ImGui.TextWrapped("Plays one of Snooper's chat sounds when someone else says a line. Your own lines stay quiet.");
@@ -2383,7 +2415,7 @@ internal sealed class MainWindow : Window, IDisposable
         else
         {
             ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
-            ImGui.TextWrapped("Click Sign in with ChatGPT. A browser opens. Sign in, allow Afterword to use that plan, then come back here.");
+            ImGui.TextWrapped("Click Sign in with ChatGPT. A browser opens. This needs a paid ChatGPT plan. Sign in, allow Afterword to use that plan, then come back here.");
             ImGui.PopStyleColor();
             ImGui.Spacing();
             if (CoverButton("Sign in with ChatGPT", new Vector2(220, 32)))
@@ -3820,8 +3852,12 @@ internal sealed class MainWindow : Window, IDisposable
         return ImGui.GetContentRegionAvail().X - (style.FramePadding.X * 2f) - style.ScrollbarSize;
     }
 
-    private static int WrapScratchBox(ref ImGuiInputTextCallbackData data, ref float wrapWidth)
+    private int WrapScratchBox(ref ImGuiInputTextCallbackData data, ref float wrapWidth)
     {
+        this.scratchCursor = data.CursorPos;
+        this.scratchSelA = data.SelectionStart;
+        this.scratchSelB = data.SelectionEnd;
+
         if (wrapWidth < 48f || data.BufTextLen <= 0)
             return 0;
 
@@ -3981,6 +4017,269 @@ internal sealed class MainWindow : Window, IDisposable
         this.spellSeen = string.Empty;
         this.spellChecked = string.Empty;
         this.spellDirtyAt = 0;
+        this.thesaurusOpen = false;
+    }
+
+    private void NoteScratchClick()
+    {
+        if (this.scratchWordPending && !ImGui.IsMouseClicked(ImGuiMouseButton.Left))
+        {
+            this.scratchWordPending = false;
+            this.OpenThesaurus();
+            return;
+        }
+
+        var clicked = ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) || ImGui.IsMouseClicked(ImGuiMouseButton.Left);
+        if (!clicked)
+            return;
+
+        var now = ImGui.GetTime();
+        var again = ImGui.IsMouseDoubleClicked(ImGuiMouseButton.Left) || now - this.scratchClickAt <= 0.45;
+        this.scratchClickAt = now;
+        if (again)
+            this.scratchWordPending = true;
+    }
+
+    private void OpenThesaurus()
+    {
+        var text = this.scratchDraft;
+        this.thesaurusPos = ImGui.GetMousePos() + new Vector2(16, 16);
+        if (!TryScratchWord(text, this.scratchCursor, this.scratchSelA, this.scratchSelB, out var start, out var length))
+        {
+            this.thesaurusWord = string.Empty;
+            this.thesaurusStart = -1;
+            this.thesaurusLength = 0;
+            this.thesaurusWords = [];
+            this.thesaurusOpen = true;
+            return;
+        }
+
+        var word = text.Substring(start, length);
+        this.thesaurusWord = word;
+        this.thesaurusStart = start;
+        this.thesaurusLength = length;
+        this.thesaurusWords = new List<string>(Thesaurus.Others(word));
+        this.thesaurusOpen = true;
+    }
+
+    private void UseThesaurusWord(string suggestion)
+    {
+        var text = this.scratchDraft;
+        var start = this.thesaurusStart;
+        var length = this.thesaurusLength;
+        if (start < 0 || length <= 0 || start + length > text.Length)
+        {
+            this.thesaurusOpen = false;
+            return;
+        }
+
+        var current = text.Substring(start, length);
+        if (!string.Equals(current, this.thesaurusWord, StringComparison.Ordinal))
+        {
+            this.thesaurusOpen = false;
+            return;
+        }
+
+        var replacement = MatchWordCase(current, suggestion);
+        this.scratchDraft = text.Remove(start, length).Insert(start, replacement);
+        this.scratchGeneration++;
+        this.spellSeen = string.Empty;
+        this.thesaurusOpen = false;
+    }
+
+    private void DrawThesaurusWindow()
+    {
+        if (!this.recorder.Settings.Thesaurus)
+        {
+            this.thesaurusOpen = false;
+            return;
+        }
+
+        if (!this.thesaurusOpen)
+            return;
+
+        var step = this.FontStep();
+        ImGui.SetNextWindowPos(this.thesaurusPos, ImGuiCond.Appearing);
+        ImGui.SetNextWindowSizeConstraints(new Vector2(220 + (step * 24f), 40), new Vector2(360 + (step * 48f), 420 + (step * 40f)));
+        ImGui.SetNextWindowFocus();
+        var fontOn = this.TryPushPageFont();
+        ImGui.PushStyleColor(ImGuiCol.WindowBg, JournalTheme.Paper);
+        ImGui.PushStyleColor(ImGuiCol.TitleBg, JournalTheme.Cover);
+        ImGui.PushStyleColor(ImGuiCol.TitleBgActive, JournalTheme.Cover);
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.CoverInk);
+        ImGui.PushStyleColor(ImGuiCol.Border, JournalTheme.PaperEdge);
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowPadding, new Vector2(14, 12));
+        ImGui.PushStyleVar(ImGuiStyleVar.WindowRounding, 6f);
+        var flags = ImGuiWindowFlags.AlwaysAutoResize | ImGuiWindowFlags.NoSavedSettings | ImGuiWindowFlags.NoCollapse;
+        if (!ImGui.Begin("Other words###afterword-words", ref this.thesaurusOpen, flags))
+        {
+            ImGui.End();
+            ImGui.PopStyleVar(2);
+            ImGui.PopStyleColor(5);
+            if (fontOn)
+                this.PopPageFont();
+            return;
+        }
+
+        if (this.thesaurusWord.Length > 0)
+            MainWindow.DrawThesaurusWord(this.thesaurusWord);
+
+        ImGui.Spacing();
+        if (this.thesaurusWord.Length == 0)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Ink);
+            ImGui.TextWrapped("Double-click a word in the box.");
+            ImGui.PopStyleColor();
+        }
+        else if (this.thesaurusWords.Count == 0)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Ink);
+            ImGui.TextWrapped("No other words for that.");
+            ImGui.PopStyleColor();
+        }
+        else
+        {
+            for (var i = 0; i < this.thesaurusWords.Count; i++)
+            {
+                if (CoverButton(this.thesaurusWords[i] + "##word" + i, new Vector2(220 + (step * 24f), 28)))
+                    this.UseThesaurusWord(this.thesaurusWords[i]);
+            }
+        }
+
+        ImGui.End();
+        ImGui.PopStyleVar(2);
+        ImGui.PopStyleColor(5);
+        if (fontOn)
+            this.PopPageFont();
+    }
+
+    private static void DrawThesaurusWord(string word)
+    {
+        var padX = 10f;
+        var padY = 6f;
+        var textSize = ImGui.CalcTextSize(word);
+        var width = Math.Max(ImGui.GetContentRegionAvail().X, textSize.X + (padX * 2f));
+        var height = textSize.Y + (padY * 2f);
+        var min = ImGui.GetCursorScreenPos();
+        var max = min + new Vector2(width, height);
+        ImGui.GetWindowDrawList().AddRectFilled(min, max, ImGui.GetColorU32(JournalTheme.Cover), 3f);
+        ImGui.GetWindowDrawList().AddText(new Vector2(min.X + padX, min.Y + padY), ImGui.GetColorU32(JournalTheme.CoverInk), word);
+        ImGui.Dummy(new Vector2(width, height));
+    }
+
+    private static bool TryScratchWord(string text, int cursorByte, int selA, int selB, out int start, out int length)
+    {
+        start = 0;
+        length = 0;
+        if (string.IsNullOrEmpty(text))
+            return false;
+
+        var from = ByteToChar(text, Math.Min(selA, selB));
+        var to = ByteToChar(text, Math.Max(selA, selB));
+        if (to > from && to - from <= 40 && to <= text.Length)
+        {
+            var selected = text.Substring(from, to - from);
+            if (IsOneWord(selected))
+            {
+                start = from;
+                length = to - from;
+                return true;
+            }
+        }
+
+        var cursor = ByteToChar(text, cursorByte);
+        return WordSpan(text, cursor, out start, out length);
+    }
+
+    private static bool WordSpan(string text, int index, out int start, out int length)
+    {
+        start = 0;
+        length = 0;
+        if (text.Length == 0)
+            return false;
+
+        if (index >= text.Length)
+            index = text.Length - 1;
+        if (index < 0)
+            index = 0;
+
+        if (!IsWordChar(text[index]))
+        {
+            if (index > 0 && IsWordChar(text[index - 1]))
+                index--;
+            else
+                return false;
+        }
+
+        start = index;
+        while (start > 0 && IsWordChar(text[start - 1]))
+            start--;
+
+        var end = index + 1;
+        while (end < text.Length && IsWordChar(text[end]))
+            end++;
+
+        while (start < end && !char.IsLetter(text[start]))
+            start++;
+        while (end > start && !char.IsLetter(text[end - 1]))
+            end--;
+
+        length = end - start;
+        return length >= 2;
+    }
+
+    private static bool IsOneWord(string text)
+    {
+        if (text.Length < 2)
+            return false;
+
+        var letters = 0;
+        foreach (var c in text)
+        {
+            if (!IsWordChar(c))
+                return false;
+            if (char.IsLetter(c))
+                letters++;
+        }
+
+        return letters >= 2;
+    }
+
+    private static bool IsWordChar(char c) => char.IsLetter(c) || c is '\'' or '’' or '-';
+
+    private static int ByteToChar(string text, int byteIndex)
+    {
+        if (byteIndex <= 0)
+            return 0;
+
+        var bytes = Encoding.UTF8.GetByteCount(text);
+        if (byteIndex >= bytes)
+            return text.Length;
+
+        return Encoding.UTF8.GetCharCount(Encoding.UTF8.GetBytes(text), 0, byteIndex);
+    }
+
+    private static string MatchWordCase(string current, string suggestion)
+    {
+        var letters = 0;
+        var uppers = 0;
+        foreach (var c in current)
+        {
+            if (!char.IsLetter(c))
+                continue;
+
+            letters++;
+            if (char.IsUpper(c))
+                uppers++;
+        }
+
+        if (letters > 1 && uppers == letters)
+            return suggestion.ToUpperInvariant();
+
+        if (suggestion.Length > 0 && current.Length > 0 && char.IsUpper(current[0]))
+            return char.ToUpperInvariant(suggestion[0]) + suggestion[1..];
+
+        return suggestion;
     }
 
     private void DrawScratchpad(bool compact = false)
@@ -4027,8 +4326,18 @@ internal sealed class MainWindow : Window, IDisposable
             16000,
             new Vector2(compact ? -20f : -1f, boxHeight),
             ImGuiInputTextFlags.CallbackAlways | ImGuiInputTextFlags.NoHorizontalScroll,
-            WrapScratchBox,
+            this.WrapScratchBox,
             ref wrapWidth);
+
+        if ((ImGui.IsItemHovered() || ImGui.IsItemActive()) && this.recorder.Settings.Thesaurus)
+            this.NoteScratchClick();
+
+        if (this.recorder.Settings.Thesaurus)
+        {
+            ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+            ImGui.TextUnformatted("Double-click a word for other words.");
+            ImGui.PopStyleColor();
+        }
 
         this.DrawSpelling();
 

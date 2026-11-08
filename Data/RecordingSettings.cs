@@ -50,6 +50,9 @@ internal sealed class RecordingSettings
     /// <summary>0 is the usual size. 1 to 3 make the writing bigger.</summary>
     public int FontSize { get; set; }
 
+    /// <summary>When on, double-clicking a word in the scratchpad opens other words.</summary>
+    public bool Thesaurus { get; set; }
+
     /// <summary>0 is off. 1 is the current target. 2 is the people checked on the scene. 3 is everyone.</summary>
     public int LineAlert { get; set; }
 

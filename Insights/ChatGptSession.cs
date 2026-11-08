@@ -98,17 +98,20 @@ internal sealed class ChatGptSession
             var nonce = RandomToken();
             var verifier = RandomToken();
             var challenge = Challenge(verifier);
-            var freshAccount = string.IsNullOrWhiteSpace(this.login.ClientId);
-            var clientId = freshAccount ? "dynamic_agent_client" : this.login.ClientId;
-            var url = BuildAuthorize(clientId, freshAccount, redirect, state, nonce, challenge);
+            var registering = string.IsNullOrWhiteSpace(this.login.ClientId);
+            var clientId = registering ? "dynamic_agent_client" : this.login.ClientId;
+            var url = this.BuildAuthorize(clientId, registering, redirect, state, nonce, challenge, true);
 
             Process.Start(new ProcessStartInfo(url) { UseShellExecute = true });
-            var context = await WaitForCallback(listener).ConfigureAwait(false);
-            var query = ParseQuery(CallbackQuery(context.Request));
-            Reply(context);
-
-            if (!string.Equals(query.GetValueOrDefault("state"), state, StringComparison.Ordinal))
-                throw new InvalidOperationException("The sign-in reply did not match this attempt. Try again.");
+            Dictionary<string, string> query;
+            while (true)
+            {
+                var context = await WaitForCallback(listener).ConfigureAwait(false);
+                query = ParseQuery(CallbackQuery(context.Request));
+                Reply(context);
+                if (string.Equals(query.GetValueOrDefault("state"), state, StringComparison.Ordinal))
+                    break;
+            }
 
             if (query.TryGetValue("error", out var error) && error.Length > 0)
                 throw new InvalidOperationException("ChatGPT sign-in was cancelled.");
@@ -117,10 +120,12 @@ internal sealed class ChatGptSession
                 throw new InvalidOperationException("ChatGPT did not finish signing in. Try again.");
 
             var issued = query.GetValueOrDefault("client_id");
-            if (freshAccount)
+            if (registering)
             {
                 if (string.IsNullOrWhiteSpace(issued) || issued == "dynamic_agent_client")
                     throw new InvalidOperationException("ChatGPT did not finish registering Afterword. Try again.");
+
+                this.RememberClient(issued);
             }
             else if (!string.IsNullOrWhiteSpace(issued) && !string.Equals(issued, this.login.ClientId, StringComparison.Ordinal))
             {
@@ -129,6 +134,9 @@ internal sealed class ChatGptSession
 
             var usedClient = string.IsNullOrWhiteSpace(issued) ? this.login.ClientId : issued;
             var token = await Exchange(usedClient, code, verifier, redirect).ConfigureAwait(false);
+            if (token == null)
+                throw new InvalidOperationException("This ChatGPT account does not have a paid plan. Summaries need one.");
+
             if (string.IsNullOrWhiteSpace(token.AccessToken))
                 throw new InvalidOperationException("ChatGPT did not finish signing in. Try again.");
 
@@ -259,9 +267,22 @@ internal sealed class ChatGptSession
         throw new InvalidOperationException("Signed in, but ChatGPT did not share a model to use. Try again.");
     }
 
-    private static async Task<TokenResponse> Exchange(string clientId, string code, string verifier, string redirect)
+    private void RememberClient(string clientId)
     {
-        using var client = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
+        lock (this.gate)
+        {
+            if (string.Equals(this.login.ClientId, clientId, StringComparison.Ordinal))
+                return;
+
+            this.login.ClientId = clientId;
+            this.Save();
+        }
+    }
+
+    private static async Task<TokenResponse?> Exchange(string clientId, string code, string verifier, string redirect)
+    {
+        using var handler = new HttpClientHandler { AllowAutoRedirect = false };
+        using var client = new HttpClient(handler) { Timeout = TimeSpan.FromSeconds(30) };
         using var request = new HttpRequestMessage(HttpMethod.Post, Token);
         request.Content = new FormUrlEncodedContent(new Dictionary<string, string>
         {
@@ -275,14 +296,19 @@ internal sealed class ChatGptSession
 
         using var response = await client.SendAsync(request).ConfigureAwait(false);
         var payload = await response.Content.ReadAsStringAsync().ConfigureAwait(false);
-        if (!response.IsSuccessStatusCode)
-            throw new InvalidOperationException(SignInRefusal(payload));
+        if (response.IsSuccessStatusCode)
+        {
+            return JsonConvert.DeserializeObject<TokenResponse>(payload)
+                ?? throw new InvalidOperationException("ChatGPT did not finish signing in. Try again.");
+        }
 
-        return JsonConvert.DeserializeObject<TokenResponse>(payload)
-            ?? throw new InvalidOperationException("ChatGPT did not finish signing in. Try again.");
+        if (IsInvalidGrant(payload))
+            return null;
+
+        throw new InvalidOperationException(SignInRefusal(payload));
     }
 
-    private string BuildAuthorize(string clientId, bool freshAccount, string redirect, string state, string nonce, string challenge)
+    private string BuildAuthorize(string clientId, bool freshAccount, string redirect, string state, string nonce, string challenge, bool allowHint)
     {
         var query = new List<string>
         {
@@ -300,7 +326,7 @@ internal sealed class ChatGptSession
 
         if (freshAccount)
             query.Add("agent_name_hint=" + Uri.EscapeDataString("Afterword"));
-        else if (!string.IsNullOrWhiteSpace(this.login.IdToken))
+        else if (allowHint && !string.IsNullOrWhiteSpace(this.login.IdToken))
             query.Add("id_token_hint=" + Uri.EscapeDataString(this.login.IdToken));
 
         return Authorize + "?" + string.Join("&", query);
@@ -383,9 +409,21 @@ internal sealed class ChatGptSession
         }
 
         if (string.Equals(code, "invalid_grant", StringComparison.Ordinal))
-            return "ChatGPT rejected that sign-in. Try again, and finish it in the same browser window.";
+            return "This ChatGPT account does not have a paid plan. Summaries need one.";
 
         return "ChatGPT did not finish signing in. Try again.";
+    }
+
+    private static bool IsInvalidGrant(string payload)
+    {
+        try
+        {
+            return string.Equals(JObject.Parse(payload)["error"]?.ToString(), "invalid_grant", StringComparison.Ordinal);
+        }
+        catch
+        {
+            return false;
+        }
     }
 
     private static void Reply(HttpListenerContext context)
