@@ -71,6 +71,9 @@ internal sealed class RecordingSettings
     /// <summary>When mini is on, true shows the scratchpad and false shows the recording scene.</summary>
     public bool MiniScratch { get; set; } = true;
 
+    /// <summary>The last What's new version the player has closed.</summary>
+    public string SeenVersion { get; set; } = string.Empty;
+
     [JsonIgnore]
     public string FilePath { get; set; } = string.Empty;
 

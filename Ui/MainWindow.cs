@@ -18,7 +18,7 @@ using RPChronicles.Recording;
 
 namespace RPChronicles.Ui;
 
-internal sealed class MainWindow : Window, IDisposable
+internal sealed partial class MainWindow : Window, IDisposable
 {
     private readonly SceneRecorder recorder;
     private readonly SummarySettings summarySettings;
@@ -1024,6 +1024,9 @@ internal sealed class MainWindow : Window, IDisposable
     {
         this.dialogs.Draw();
         this.DrawThesaurusWindow();
+        this.ConsiderWhatsNew();
+        this.DrawWhatsNew();
+        this.DrawGuide();
     }
 
     private void DrawImport(NotebookSnapshot snapshot)
@@ -2433,6 +2436,8 @@ internal sealed class MainWindow : Window, IDisposable
             this.DrawGrokSignIn();
         else
             this.DrawChatSignIn();
+
+        this.DrawSettingsFooter();
     }
 
     private void DrawChatSignIn()
@@ -2501,6 +2506,23 @@ internal sealed class MainWindow : Window, IDisposable
             ImGui.TextWrapped(this.grok.Status);
             ImGui.PopStyleColor();
         }
+    }
+
+    private void DrawSettingsFooter()
+    {
+        ImGui.Spacing();
+        ImGui.Separator();
+        ImGui.Spacing();
+        if (TextLink("What's new"))
+            this.OpenWhatsNew();
+
+        ImGui.SameLine(0, 18);
+        ImGui.PushStyleColor(ImGuiCol.Text, JournalTheme.Muted);
+        ImGui.TextUnformatted("·");
+        ImGui.PopStyleColor();
+        ImGui.SameLine(0, 18);
+        if (TextLink("How to use Afterword"))
+            this.guideOpen = true;
     }
 
     private void NoteCast(string name, bool include, int added, bool earlier)

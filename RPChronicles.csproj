@@ -2,7 +2,7 @@
   <PropertyGroup>
     <AssemblyName>RPChronicles</AssemblyName>
     <Product>Afterword</Product>
-    <Version>0.1.25.0</Version>
+    <Version>0.1.26.0</Version>
     <Description>Record roleplay scenes from /say and emotes, then reopen them in a private notebook.</Description>
     <Authors>Afterword</Authors>
     <Author>Afterword</Author>
@@ -14,6 +14,15 @@
     <AcceptsFeedback>false</AcceptsFeedback>
     <IsPackable>false</IsPackable>
   </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="XivOfflineStudio\**" />
+    <EmbeddedResource Remove="XivOfflineStudio\**" />
+    <None Remove="XivOfflineStudio\**" />
+    <Content Remove="XivOfflineStudio\**" />
+    <Page Remove="XivOfflineStudio\**" />
+    <ApplicationDefinition Remove="XivOfflineStudio\**" />
+  </ItemGroup>
 
   <ItemGroup>
     <Content Include="RPChronicles.json">

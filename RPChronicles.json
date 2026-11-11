@@ -4,7 +4,7 @@
   "Punchline": "A private notebook for roleplay scenes.",
   "Description": "Record roleplay scenes from /say and emotes, then reopen them in a private notebook. Logs stay on this computer.",
   "InternalName": "RPChronicles",
-  "AssemblyVersion": "0.1.25.0",
+  "AssemblyVersion": "0.1.26.0",
   "ApplicableVersion": "any",
   "DalamudApiLevel": 15,
   "Tags": ["roleplay", "notebook"],
