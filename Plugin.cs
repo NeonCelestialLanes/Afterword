@@ -1,6 +1,8 @@
 using System;
 using Dalamud.Game.Chat;
+using Dalamud.Game.ClientState.Objects.Enums;
 using Dalamud.Game.Command;
+using Dalamud.Game.Gui.ContextMenu;
 using Dalamud.Game.Text.SeStringHandling;
 using Dalamud.Interface.Windowing;
 using Dalamud.Plugin;
@@ -21,6 +23,7 @@ public sealed class Plugin : IDalamudPlugin
     private readonly ICommandManager commandManager;
     private readonly IChatGui chatGui;
     private readonly IClientState clientState;
+    private readonly IContextMenu contextMenu;
     private readonly IPluginLog log;
     private readonly SceneRecorder recorder;
     private readonly WindowSystem windowSystem = new("RPChronicles");
@@ -31,6 +34,7 @@ public sealed class Plugin : IDalamudPlugin
         ICommandManager commandManager,
         IChatGui chatGui,
         IClientState clientState,
+        IContextMenu contextMenu,
         IPlayerState playerState,
         IObjectTable objectTable,
         ITargetManager targets,
@@ -42,6 +46,7 @@ public sealed class Plugin : IDalamudPlugin
         this.commandManager = commandManager;
         this.chatGui = chatGui;
         this.clientState = clientState;
+        this.contextMenu = contextMenu;
         this.log = log;
 
         var settings = RecordingSettings.Load(pluginInterface.GetPluginConfigDirectory());
@@ -80,11 +85,13 @@ public sealed class Plugin : IDalamudPlugin
         chatGui.ChatMessage += this.OnChatMessage;
         clientState.Login += this.OnLogin;
         clientState.Logout += this.OnLogout;
+        contextMenu.OnMenuOpened += this.OnMenuOpened;
         this.log.Information("Afterword is ready. Type {Command} to open it.", CommandName);
     }
 
     public void Dispose()
     {
+        this.contextMenu.OnMenuOpened -= this.OnMenuOpened;
         this.clientState.Logout -= this.OnLogout;
         this.clientState.Login -= this.OnLogin;
         this.chatGui.ChatMessage -= this.OnChatMessage;
@@ -107,6 +114,52 @@ public sealed class Plugin : IDalamudPlugin
     {
         this.windowSystem.Draw();
         this.window.DrawDialogs();
+    }
+
+    private void OnMenuOpened(IMenuOpenedArgs args)
+    {
+        try
+        {
+            if (!TryPlayer(args, out var name))
+                return;
+
+            var already = this.window.IsInRecording(name);
+            args.AddMenuItem(new MenuItem
+            {
+                Name = already ? "In the recording" : "Add to the recording",
+                IsEnabled = !already,
+                UseDefaultPrefix = true,
+                OnClicked = _ => this.window.AddToRecording(name),
+            });
+        }
+        catch (Exception ex)
+        {
+            this.log.Error(ex, "Could not add the recording option to the menu.");
+        }
+    }
+
+    private static bool TryPlayer(IMenuOpenedArgs args, out string name)
+    {
+        name = string.Empty;
+        if (args.MenuType != ContextMenuType.Default || args.Target is not MenuTargetDefault target)
+            return false;
+
+        var raw = target.TargetName;
+        if (string.IsNullOrWhiteSpace(raw))
+            return false;
+
+        if (target.TargetObject != null)
+        {
+            if (target.TargetObject.ObjectKind != ObjectKind.Pc)
+                return false;
+        }
+        else if (target.TargetContentId == 0 && target.TargetCharacter == null)
+        {
+            return false;
+        }
+
+        name = PlayerNames.Clean(raw);
+        return name.Length > 0;
     }
 
     private void OnLogin() => this.recorder.OnLogin();

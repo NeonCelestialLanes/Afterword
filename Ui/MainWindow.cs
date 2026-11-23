@@ -2551,6 +2551,34 @@ internal sealed partial class MainWindow : Window, IDisposable
                 : $"Brought in {added} lines from {who}, from the last 10 minutes.";
     }
 
+    internal bool IsInRecording(string name)
+    {
+        var cleaned = PlayerNames.Clean(name);
+        if (cleaned.Length == 0)
+            return false;
+
+        var active = this.recorder.Snapshot().ActiveScene;
+        if (active != null)
+            return ContainsName(active.SelectedSpeakers ?? [], cleaned);
+
+        return ContainsName(this.draftCast, cleaned);
+    }
+
+    internal void AddToRecording(string name)
+    {
+        var cleaned = PlayerNames.Clean(name);
+        if (cleaned.Length == 0 || this.IsInRecording(cleaned))
+            return;
+
+        if (this.recorder.Snapshot().ActiveScene != null)
+        {
+            this.NoteCast(cleaned, true, this.recorder.IncludeSpeaker(cleaned, true), earlier: false);
+            return;
+        }
+
+        this.SetDraft(cleaned, true);
+    }
+
     private void SetDraft(string name, bool include)
     {
         var trimmed = name.Trim();
