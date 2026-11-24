@@ -2570,13 +2570,44 @@ internal sealed partial class MainWindow : Window, IDisposable
         if (cleaned.Length == 0 || this.IsInRecording(cleaned))
             return;
 
+        var self = this.recorder.SelfName();
+        var addSelf = this.CastIsEmpty() && self.Length > 0 && !PlayerNames.Same(self, cleaned);
         if (this.recorder.Snapshot().ActiveScene != null)
         {
-            this.NoteCast(cleaned, true, this.recorder.IncludeSpeaker(cleaned, true), earlier: false);
+            if (addSelf)
+                this.recorder.AddExtraSpeaker(self);
+
+            var added = this.recorder.AddExtraSpeaker(cleaned);
+            this.NoteCast(cleaned, true, added, earlier: false);
+            if (addSelf)
+                this.castNotice = string.IsNullOrWhiteSpace(this.castNotice)
+                    ? "You are in the scene too."
+                    : this.castNotice + " You are in the scene too.";
             return;
         }
 
-        this.SetDraft(cleaned, true);
+        if (addSelf)
+            this.AddDraftName(self);
+
+        this.AddDraftName(cleaned);
+    }
+
+    private bool CastIsEmpty()
+    {
+        var active = this.recorder.Snapshot().ActiveScene;
+        if (active != null)
+            return active.SelectedSpeakers == null || active.SelectedSpeakers.Count == 0;
+
+        return this.draftCast.Count == 0;
+    }
+
+    private void AddDraftName(string name)
+    {
+        var trimmed = PlayerNames.Clean(name);
+        if (trimmed.Length == 0 || ContainsName(this.draftCast, trimmed))
+            return;
+
+        this.draftCast.Add(trimmed);
     }
 
     private void SetDraft(string name, bool include)

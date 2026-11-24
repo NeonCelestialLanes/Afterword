@@ -29,6 +29,23 @@ internal static class JournalNotes
     [
         new ReleaseNote
         {
+            Version = "0.1.28",
+            Title = "Right-click adds extra people.",
+            Sections =
+            [
+                new ReleaseSection
+                {
+                    Heading = "New",
+                    Lines =
+                    [
+                        "Right-click a person and choose Add to the recording. Their box is checked, and the scene stays as it is.",
+                        "The first person also adds you, because you can't right-click yourself.",
+                    ],
+                },
+            ],
+        },
+        new ReleaseNote
+        {
             Version = "0.1.27",
             Title = "Add someone from the right-click menu.",
             Sections =
@@ -184,7 +201,7 @@ internal static class JournalNotes
             Lines =
             [
                 "On New Scene, give it a title and a place. Choose everyone nearby, or check the people you want. Press Start recording.",
-                "Right-click a person and choose Add to the recording. Their box is checked on the scene page.",
+                "Right-click a person and choose Add to the recording. Their box is checked on the scene page. The first person also adds you, because you can't right-click yourself.",
                 "Only the chats turned on in Settings are kept. Combat, loot, and echoes stay out. Nothing from before you press Start is kept.",
                 "Pause holds the scene. Stop and save puts it in My Notebook, where you can read it, edit a line, or check lines off.",
             ],

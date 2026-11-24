@@ -432,6 +432,28 @@ internal sealed class NotebookStore
         }
     }
 
+    public bool AddSpeaker(string name)
+    {
+        lock (this.gate)
+        {
+            var active = this.ActiveUnlocked();
+            if (active == null)
+                return false;
+
+            var trimmed = PlayerNames.Clean(name);
+            if (string.IsNullOrWhiteSpace(trimmed))
+                return false;
+
+            active.SelectedSpeakers ??= new List<string>();
+            if (IndexOfName(active.SelectedSpeakers, trimmed) >= 0)
+                return false;
+
+            active.SelectedSpeakers.Add(trimmed);
+            this.SaveUnlocked();
+            return true;
+        }
+    }
+
     public int AddEarlierLines(string name, IReadOnlyList<SceneLine> recent, TimeSpan within)
     {
         lock (this.gate)

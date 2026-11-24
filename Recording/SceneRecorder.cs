@@ -328,6 +328,22 @@ internal sealed class SceneRecorder
         return this.store.AddEarlierLines(name, this.CopyRecent(), AddedWindow);
     }
 
+    public string SelfName()
+    {
+        if (!this.playerState.IsLoaded)
+            return string.Empty;
+
+        return PlayerNames.Clean(this.playerState.CharacterName ?? string.Empty);
+    }
+
+    public int AddExtraSpeaker(string name)
+    {
+        if (!this.store.AddSpeaker(name))
+            return 0;
+
+        return this.store.AddEarlierLines(name, this.CopyRecent(), AddedWindow);
+    }
+
     public int IncludeEarlier(string name) => this.store.AddEarlierLines(name, this.CopyRecent(), RecentLimit);
 
     public IReadOnlyList<string> NearbyNames()
